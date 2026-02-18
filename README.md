@@ -144,7 +144,7 @@ docker compose up -d
 echo "127.0.0.1 scdl.local" | sudo tee -a /etc/hosts
 ```
 
-L'application sera accessible sur `http://localhost:3000` (ou `http://scdl.local` si vous avez configuré le hosts).
+L'application sera accessible sur `http://localhost` (ou `http://scdl.local` si vous avez configuré le hosts).
 
 ---
 
@@ -185,7 +185,7 @@ Les réglages SoundCloud (token d'authentification, format audio par défaut) se
 Navigateur (http://scdl.local)
     |
     v
-Nginx (frontend, port 3000)
+Nginx (frontend, port 80)
     |-- /           --> React SPA (fichiers statiques)
     |-- /api/*      --> Backend FastAPI (port 8000)
     |-- /ws/*       --> WebSocket (progression sync)
