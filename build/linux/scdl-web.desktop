@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=scdl-web
+Comment=SoundCloud Downloader Web UI
+Exec=scdl-web
+Icon=scdl-web
+Terminal=false
+Categories=Audio;Network;

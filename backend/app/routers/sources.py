@@ -127,7 +127,8 @@ async def open_folder(source_id: int, db: AsyncSession = Depends(get_db)):
     # Create if it doesn't exist
     folder.mkdir(parents=True, exist_ok=True)
 
-    # Open with the native file manager
+    # Try to open with the native file manager
+    opened = False
     if sys.platform == "linux":
         cmd = "xdg-open"
     elif sys.platform == "darwin":
@@ -135,11 +136,13 @@ async def open_folder(source_id: int, db: AsyncSession = Depends(get_db)):
     elif sys.platform == "win32":
         cmd = "explorer"
     else:
-        raise HTTPException(500, f"Unsupported platform: {sys.platform}")
+        cmd = None
 
-    try:
-        subprocess.Popen([cmd, str(folder)])
-    except FileNotFoundError:
-        raise HTTPException(500, f"Command '{cmd}' not found. Is it installed?")
+    if cmd:
+        try:
+            subprocess.Popen([cmd, str(folder)])
+            opened = True
+        except FileNotFoundError:
+            pass
 
-    return {"status": "opened", "path": str(folder)}
+    return {"status": "opened" if opened else "path_only", "path": str(folder)}

@@ -1,6 +1,7 @@
-import { Title, TextInput, Select, Button, Stack, Card, PasswordInput, Alert } from "@mantine/core";
-import { IconCheck } from "@tabler/icons-react";
+import { Title, TextInput, Select, Button, Stack, Card, PasswordInput, Alert, Group } from "@mantine/core";
+import { IconCheck, IconFolder } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
+import { FolderPicker } from "../components/FolderPicker";
 import { useState, useEffect } from "react";
 
 export function SettingsPage() {
@@ -11,6 +12,7 @@ export function SettingsPage() {
   const [nameFormat, setNameFormat] = useState("");
   const [musicRoot, setMusicRoot] = useState("");
   const [saved, setSaved] = useState(false);
+  const [folderPickerOpened, setFolderPickerOpened] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -39,12 +41,30 @@ export function SettingsPage() {
       <Title order={2} mb="lg">Settings</Title>
       <Card withBorder p="lg" maw={600}>
         <Stack gap="md">
-          <TextInput
-            label="Music Root Path"
-            value={musicRoot}
-            onChange={(e) => setMusicRoot(e.currentTarget.value)}
-            placeholder="/home/user/Music"
-            description="Absolute path where music files are downloaded"
+          <div>
+            <Group gap="xs" align="flex-end">
+              <TextInput
+                flex={1}
+                label="Music Root Path"
+                value={musicRoot}
+                onChange={(e) => setMusicRoot(e.currentTarget.value)}
+                placeholder="/home/user/Music"
+                description="Absolute path where music files are downloaded"
+              />
+              <Button
+                variant="light"
+                leftSection={<IconFolder size={16} />}
+                onClick={() => setFolderPickerOpened(true)}
+              >
+                Browse
+              </Button>
+            </Group>
+          </div>
+          <FolderPicker
+            opened={folderPickerOpened}
+            onClose={() => setFolderPickerOpened(false)}
+            onSelect={setMusicRoot}
+            initialPath={musicRoot || "/"}
           />
           <PasswordInput
             label="SoundCloud Auth Token"

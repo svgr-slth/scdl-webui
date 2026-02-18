@@ -27,8 +27,11 @@ export function useSyncWebSocket(sourceId: number | null) {
       return;
     }
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/sync/${sourceId}`);
+    // Under Wails (wails:// protocol), connect directly to the Python backend
+    const wsUrl = window.location.protocol === "wails:"
+      ? `ws://127.0.0.1:8000/ws/sync/${sourceId}`
+      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/sync/${sourceId}`;
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

@@ -4,7 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import init_db
-from app.routers import sources, settings, history, sync
+from app.routers import sources, settings, history, sync, filesystem
 from app.ws.sync_progress import ws_manager
 from app.services.sync_manager import sync_manager
 
@@ -31,6 +31,7 @@ app.include_router(sources.router)
 app.include_router(settings.router)
 app.include_router(history.router)
 app.include_router(sync.router)
+app.include_router(filesystem.router)
 
 
 @app.get("/api/health")

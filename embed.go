@@ -3,4 +3,4 @@ package main
 import "embed"
 
 //go:embed all:bundle
-var bundleFS embed.FS
+var backendFS embed.FS
