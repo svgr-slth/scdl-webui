@@ -2,19 +2,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
+	"sync"
 	"time"
 
+	gorilla "github.com/gorilla/websocket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct manages the application lifecycle.
 type App struct {
-	ctx        context.Context
-	backendCmd *exec.Cmd
-	quitting   bool // true = real quit from tray, false = hide-to-tray on window close
+	ctx              context.Context
+	backendCmd       *exec.Cmd
+	quitting         bool // true = real quit from tray, false = hide-to-tray on window close
+	syncWatchCancels sync.Map
 }
 
 // NewApp creates a new App instance.
@@ -103,6 +107,50 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	log.Println("Shutting down...")
 	stopBackend(a.backendCmd)
+}
+
+// WatchSync opens a WebSocket connection to the backend and relays messages
+// to the frontend via Wails events. Called by the frontend when it wants
+// live sync updates (replaces direct WebSocket, which WebView2 blocks).
+func (a *App) WatchSync(sourceId int) {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.syncWatchCancels.Store(sourceId, cancel)
+	go func() {
+		defer cancel()
+		defer a.syncWatchCancels.Delete(sourceId)
+		eventName := fmt.Sprintf("sync:%d", sourceId)
+		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
+			fmt.Sprintf("ws://127.0.0.1:8000/ws/sync/%d", sourceId), nil)
+		if err != nil {
+			runtime.EventsEmit(a.ctx, eventName,
+				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			return
+		}
+		defer conn.Close()
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			runtime.EventsEmit(a.ctx, eventName, string(raw))
+			var msg map[string]interface{}
+			if json.Unmarshal(raw, &msg) == nil {
+				if t, _ := msg["type"].(string); t == "status" {
+					s, _ := msg["status"].(string)
+					if s == "completed" || s == "failed" || s == "cancelled" {
+						return
+					}
+				}
+			}
+		}
+	}()
+}
+
+// StopWatchSync cancels the goroutine watching the given source (called on unmount).
+func (a *App) StopWatchSync(sourceId int) {
+	if v, ok := a.syncWatchCancels.Load(sourceId); ok {
+		v.(context.CancelFunc)()
+	}
 }
 
 // SelectDirectory opens a native directory picker dialog.

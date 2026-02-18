@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WsMessage } from "../types/sync";
+import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime";
+import { WatchSync, StopWatchSync } from "../wailsjs/go/main/App";
 
 interface LogLine {
   line: string;
@@ -29,19 +31,8 @@ export function useSyncWebSocket(sourceId: number | null) {
       return;
     }
 
-    // Under Wails (wails:// protocol), connect directly to the Python backend
-    const wsUrl = window.location.protocol === "wails:"
-      ? `ws://127.0.0.1:8000/ws/sync/${sourceId}`
-      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/sync/${sourceId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-    };
-
-    ws.onmessage = (event) => {
-      const msg: WsMessage = JSON.parse(event.data);
+    function handleMessage(raw: string) {
+      const msg: WsMessage = JSON.parse(raw);
       switch (msg.type) {
         case "log":
           if (msg.line !== undefined) {
@@ -65,6 +56,34 @@ export function useSyncWebSocket(sourceId: number | null) {
           }
           break;
       }
+    }
+
+    // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
+    // connections. Use the Go-side bridge instead: WatchSync opens a WS
+    // connection server-side and relays messages via Wails EventsEmit.
+    if (window.location.protocol === "wails:") {
+      const eventName = `sync:${sourceId}`;
+      WatchSync(sourceId);
+      setConnected(true);
+      EventsOn(eventName, handleMessage);
+      return () => {
+        EventsOff(eventName);
+        StopWatchSync(sourceId);
+        setConnected(false);
+      };
+    }
+
+    // Dev / browser mode: connect directly via WebSocket.
+    const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/sync/${sourceId}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      handleMessage(event.data);
     };
 
     ws.onclose = () => {

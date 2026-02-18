@@ -5,3 +5,11 @@
 export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
+
+export function StopWatchSync(arg1) {
+  return window['go']['main']['App']['StopWatchSync'](arg1);
+}
+
+export function WatchSync(arg1) {
+  return window['go']['main']['App']['WatchSync'](arg1);
+}
