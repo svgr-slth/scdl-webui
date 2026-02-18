@@ -70,7 +70,7 @@ jobs:
       # ── Linux: AppImage ──────────────────────────────────────────────────
       - name: Build Linux
         if: runner.os == 'Linux'
-        run: xvfb-run wails build -clean -platform linux/amd64
+        run: xvfb-run wails build -clean -platform linux/amd64 -tags webkit2_41
 
       - name: Download appimagetool
         if: runner.os == 'Linux'
