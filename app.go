@@ -26,7 +26,17 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// First-run setup: extract backend, create venv, install deps
+	// Always re-extract backend Python files so upgrades take effect immediately.
+	if err := extractBackendFiles(); err != nil {
+		runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+			Type:    runtime.ErrorDialog,
+			Title:   "Setup Failed",
+			Message: fmt.Sprintf("Failed to extract backend files:\n\n%v", err),
+		})
+		return
+	}
+
+	// First-run setup: create venv and install deps (skipped if venv already exists).
 	if !isSetupComplete() {
 		log.Println("First run detected, running setup...")
 		if err := runFirstTimeSetup(); err != nil {

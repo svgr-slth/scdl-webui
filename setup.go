@@ -10,21 +10,23 @@ import (
 	"strings"
 )
 
-// isSetupComplete checks if the backend has been extracted and the venv exists.
+// isSetupComplete checks if the venv has been created.
+// Backend Python files are always re-extracted by startup() to pick up upgrades.
 func isSetupComplete() bool {
-	if _, err := os.Stat(backendDir()); os.IsNotExist(err) {
-		return false
+	// Check for venv Scripts (Windows) or bin (Unix)
+	if _, err := os.Stat(filepath.Join(venvDir(), "Scripts")); err == nil {
+		return true
 	}
-	return true
+	if _, err := os.Stat(filepath.Join(venvDir(), "bin")); err == nil {
+		return true
+	}
+	return false
 }
 
-// runFirstTimeSetup extracts the backend, creates the venv, installs deps, and creates config.
+// runFirstTimeSetup creates the venv, installs deps, and creates config.
+// Backend files are always extracted by startup() before this is called.
 func runFirstTimeSetup() error {
 	log.Println("Running first-time setup...")
-
-	if err := extractBackendFiles(); err != nil {
-		return fmt.Errorf("failed to extract backend files: %w", err)
-	}
 
 	if err := createVenv(); err != nil {
 		return fmt.Errorf("failed to create virtual environment: %w", err)
