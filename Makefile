@@ -1,4 +1,4 @@
-.PHONY: build bundle clean build-linux build-windows build-darwin
+.PHONY: build bundle clean build-linux build-windows build-darwin build-all
 
 VERSION := 1.0.0
 BINARY := scdl-web
@@ -25,18 +25,20 @@ build-darwin: bundle
 	cd $(INSTALLER_DIR) && GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o ../$(DIST_DIR)/$(BINARY)-darwin-arm64 .
 
 # Bundle project files for embedding
-bundle:
+bundle: frontend-build
 	rm -rf $(BUNDLE_DIR)
 	mkdir -p $(BUNDLE_DIR)
 	cp -r backend $(BUNDLE_DIR)/
-	cp -r frontend $(BUNDLE_DIR)/
-	rm -rf $(BUNDLE_DIR)/frontend/node_modules
-	cp docker-compose.yml $(BUNDLE_DIR)/
+	cp -r frontend/dist $(BUNDLE_DIR)/frontend-dist/
 	cp .env.example $(BUNDLE_DIR)/
 	@# Clean up unnecessary files
 	find $(BUNDLE_DIR) -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 	find $(BUNDLE_DIR) -name '*.pyc' -delete 2>/dev/null || true
 	find $(BUNDLE_DIR) -name '.git' -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Build frontend static files
+frontend-build:
+	cd frontend && npm install && npm run build
 
 clean:
 	rm -rf $(BUNDLE_DIR) $(DIST_DIR)

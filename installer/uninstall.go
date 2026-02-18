@@ -21,20 +21,17 @@ func cmdUninstall() {
 		return
 	}
 
-	// Stop containers
-	printStep("Stopping containers...")
-	if _, err := os.Stat(composeFile()); err == nil {
-		composeDown()
+	// Stop running process
+	printStep("Stopping scdl-web...")
+	if pid, err := readPidFile(); err == nil && isProcessRunning(pid) {
+		process, _ := os.FindProcess(pid)
+		if process != nil {
+			process.Signal(os.Interrupt)
+		}
 	}
+	removePidFile()
 
-	// Remove Docker images
-	fmt.Println()
-	if confirmPrompt("Remove Docker images?") {
-		printStep("Removing Docker images...")
-		composeRun("down", "--rmi", "local")
-	}
-
-	// Disable and remove service
+	// Remove service
 	printStep("Removing auto-start service...")
 	removeService()
 
@@ -47,18 +44,16 @@ func cmdUninstall() {
 	dDir := dataDir()
 
 	if isSubdir(dDir, iDir) {
-		// Data is inside install dir, move it out
 		backupDir := filepath.Join(homeDir(), "scdl-web-data")
 		printStep("Backing up data to %s...", backupDir)
 		if err := os.Rename(dDir, backupDir); err != nil {
-			// Try copy if rename fails (cross-device)
 			printWarn("Could not move data dir, it will remain in place: %v", err)
 		} else {
 			printOK("Data backed up to %s", backupDir)
 		}
 	}
 
-	// Remove install directory
+	// Remove install directory (includes venv, backend code)
 	printStep("Removing installation directory...")
 	if err := os.RemoveAll(iDir); err != nil {
 		printWarn("Could not fully remove %s: %v", iDir, err)

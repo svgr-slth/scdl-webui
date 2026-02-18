@@ -1,4 +1,7 @@
 import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -93,9 +96,10 @@ async def delete_source(
 
     # Optionally delete music files
     if delete_files:
-        music_folder = sync_manager.runner.get_music_folder(source)
+        music_root = await sync_manager.get_current_music_root()
+        music_folder = music_root / source.local_folder
         try:
-            music_folder.resolve().relative_to(sync_manager.runner.music_root.resolve())
+            music_folder.resolve().relative_to(music_root.resolve())
         except ValueError:
             raise HTTPException(400, "Invalid music folder path")
         if music_folder.exists():
@@ -103,3 +107,39 @@ async def delete_source(
 
     await db.delete(source)
     await db.commit()
+
+
+@router.post("/{source_id}/open-folder")
+async def open_folder(source_id: int, db: AsyncSession = Depends(get_db)):
+    source = await db.get(Source, source_id)
+    if not source:
+        raise HTTPException(404, "Source not found")
+
+    music_root = await sync_manager.get_current_music_root()
+    folder = music_root / source.local_folder
+
+    # Directory traversal protection
+    try:
+        folder.resolve().relative_to(music_root.resolve())
+    except ValueError:
+        raise HTTPException(400, "Invalid folder path")
+
+    # Create if it doesn't exist
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # Open with the native file manager
+    if sys.platform == "linux":
+        cmd = "xdg-open"
+    elif sys.platform == "darwin":
+        cmd = "open"
+    elif sys.platform == "win32":
+        cmd = "explorer"
+    else:
+        raise HTTPException(500, f"Unsupported platform: {sys.platform}")
+
+    try:
+        subprocess.Popen([cmd, str(folder)])
+    except FileNotFoundError:
+        raise HTTPException(500, f"Command '{cmd}' not found. Is it installed?")
+
+    return {"status": "opened", "path": str(folder)}

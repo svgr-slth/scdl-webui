@@ -1,7 +1,7 @@
 import { Title, Button, Group, Stack, Card, Alert, Divider, Modal, Text, Progress } from "@mantine/core";
-import { IconPlayerPlay, IconArrowLeft, IconRefresh } from "@tabler/icons-react";
+import { IconPlayerPlay, IconArrowLeft, IconRefresh, IconFolder } from "@tabler/icons-react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSource, useUpdateSource, useResetArchive } from "../hooks/useSources";
+import { useSource, useUpdateSource, useResetArchive, useOpenFolder } from "../hooks/useSources";
 import { SourceForm } from "../components/SourceForm";
 import { SyncLogViewer } from "../components/SyncLogViewer";
 import { useSyncWebSocket } from "../hooks/useSyncWebSocket";
@@ -17,6 +17,7 @@ export function SourceDetail() {
   const { data: source, isLoading } = useSource(sourceId);
   const updateSource = useUpdateSource();
   const resetArchive = useResetArchive();
+  const openFolder = useOpenFolder();
   const qc = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
@@ -76,6 +77,13 @@ export function SourceDetail() {
           Back
         </Button>
         <Title order={2}>{source.name}</Title>
+        <Button
+          variant="light"
+          leftSection={<IconFolder size={16} />}
+          onClick={() => openFolder.mutate(sourceId)}
+        >
+          Open Folder
+        </Button>
       </Group>
 
       <Card withBorder p="lg">

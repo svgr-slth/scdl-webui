@@ -5,10 +5,10 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 func cmdInstall(args []string) {
@@ -27,77 +27,84 @@ func cmdInstall(args []string) {
 	fmt.Println()
 
 	checkPrerequisites()
-	ensureDocker()
+	ensurePython()
+	ensureFFmpeg()
 	extractFiles()
+	setupVenv()
 	createEnvFile()
 	createDataDirs()
-	buildImages()
 	setupHosts()
 	installService()
-	startApp()
 	installBinary()
 	printSummary()
+
+	fmt.Println()
+	printInfo("Start the application with: scdl-web start")
 }
 
 func checkPrerequisites() {
 	printStep("Checking prerequisites...")
 
-	// Check we're not running inside a container
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		fatal("Running inside a Docker container is not supported.")
 	}
 
-	// Check disk space (need at least 2GB free)
-	// We just warn; don't block installation
 	printOK("Prerequisites check passed")
 }
 
-func ensureDocker() {
-	printStep("Checking Docker...")
+func ensurePython() {
+	printStep("Checking Python...")
 
-	if checkDocker() && checkDockerCompose() {
-		printOK("Docker and Docker Compose are available")
+	if checkPython() {
+		py := findPython()
+		out, _ := exec.Command(py, "--version").Output()
+		printOK("Python found: %s", strings.TrimSpace(string(out)))
 		return
 	}
 
-	if !checkDocker() {
-		printWarn("Docker not found")
-		if err := installDocker(); err != nil {
-			fatal("%v", err)
-		}
-
-		// Verify Docker works after installation
-		if !checkDocker() {
-			fatal("Docker installation completed but docker command is not available.\nPlease restart your terminal or computer and re-run: scdl-web install")
-		}
+	printWarn("Python 3.10+ not found")
+	if err := installPython(); err != nil {
+		fatal("%v", err)
 	}
 
-	if !checkDockerCompose() {
-		fatal("Docker Compose is not available.\nPlease install the Docker Compose plugin and re-run: scdl-web install")
+	if !checkPython() {
+		fatal("Python installation completed but python3 is not available.\nPlease restart your terminal and re-run: scdl-web install")
 	}
 
-	printOK("Docker and Docker Compose are ready")
+	printOK("Python installed successfully")
+}
+
+func ensureFFmpeg() {
+	printStep("Checking FFmpeg...")
+
+	if checkFFmpeg() {
+		printOK("FFmpeg found")
+		return
+	}
+
+	printWarn("FFmpeg not found")
+	if err := installFFmpeg(); err != nil {
+		fatal("%v", err)
+	}
+
+	if !checkFFmpeg() {
+		fatal("FFmpeg installation completed but ffmpeg is not available.\nPlease restart your terminal and re-run: scdl-web install")
+	}
+
+	printOK("FFmpeg installed successfully")
 }
 
 func extractFiles() {
-	printStep("Extracting project files to %s...", installDir())
+	printStep("Extracting files to %s...", installDir())
 
-	// If install dir exists and has a compose file, this is an upgrade
-	if _, err := os.Stat(composeFile()); err == nil {
-		printInfo("Existing installation detected, updating...")
-		// Stop running containers before updating
-		composeDown()
-	}
-
-	// Walk the embedded filesystem and copy files
-	err := fs.WalkDir(bundleFS, "bundle", func(path string, d fs.DirEntry, err error) error {
+	// Extract backend files from bundle
+	err := fs.WalkDir(bundleFS, "bundle/backend", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Strip the "bundle/" prefix to get the relative path
 		relPath := strings.TrimPrefix(path, "bundle/")
-		if relPath == "" || relPath == "bundle" {
+		if relPath == "" {
 			return nil
 		}
 
@@ -107,14 +114,12 @@ func extractFiles() {
 			return os.MkdirAll(destPath, 0755)
 		}
 
-		// Read from embedded FS
 		srcFile, err := bundleFS.Open(path)
 		if err != nil {
 			return fmt.Errorf("cannot read embedded file %s: %w", path, err)
 		}
 		defer srcFile.Close()
 
-		// Create destination file
 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 			return err
 		}
@@ -136,55 +141,76 @@ func extractFiles() {
 		fatal("Failed to extract files: %v", err)
 	}
 
-	printOK("Project files extracted")
+	// Also extract .env.example
+	if data, err := fs.ReadFile(bundleFS, "bundle/.env.example"); err == nil {
+		os.WriteFile(filepath.Join(installDir(), ".env.example"), data, 0644)
+	}
+
+	printOK("Files extracted")
+}
+
+func setupVenv() {
+	if err := createVenv(); err != nil {
+		fatal("Failed to create virtual environment: %v", err)
+	}
+
+	if err := pipInstall(); err != nil {
+		fatal("Failed to install dependencies: %v", err)
+	}
 }
 
 func createEnvFile() {
-	// Don't overwrite existing .env (preserve user settings on upgrade)
 	if _, err := os.Stat(envFile()); err == nil {
 		printInfo(".env file already exists, preserving")
 		return
 	}
 
-	examplePath := filepath.Join(installDir(), ".env.example")
-	data, err := os.ReadFile(examplePath)
+	data, err := fs.ReadFile(bundleFS, "bundle/.env.example")
 	if err != nil {
 		printWarn("Could not read .env.example: %v", err)
 		return
 	}
 
-	if err := os.WriteFile(envFile(), data, 0644); err != nil {
+	// Replace Docker paths with host paths
+	content := string(data)
+	content = strings.ReplaceAll(content, "sqlite+aiosqlite:////data/db/scdl-web.db",
+		fmt.Sprintf("sqlite+aiosqlite:///%s", filepath.Join(dataDir(), "db", "scdl-web.db")))
+	content = strings.ReplaceAll(content, "/data/music", filepath.Join(dataDir(), "music"))
+	content = strings.ReplaceAll(content, "/data/archives", filepath.Join(dataDir(), "archives"))
+
+	if err := os.WriteFile(envFile(), []byte(content), 0644); err != nil {
 		printWarn("Could not create .env file: %v", err)
 		return
 	}
 
-	printOK("Created .env from .env.example")
+	printOK("Created .env with default paths")
+	printInfo("Music will be downloaded to: %s", filepath.Join(dataDir(), "music"))
+	printInfo("Edit %s to change the download location", envFile())
 }
 
 func createDataDirs() {
-	dirs := []string{
-		filepath.Join(dataDir(), "db"),
-		filepath.Join(dataDir(), "music"),
-		filepath.Join(dataDir(), "archives"),
+	// Read the env file to get configured paths
+	envVars := readEnvFile(envFile())
+	musicRoot := filepath.Join(dataDir(), "music")
+	archivesRoot := filepath.Join(dataDir(), "archives")
+	dbDir := filepath.Join(dataDir(), "db")
+
+	for _, env := range envVars {
+		if strings.HasPrefix(env, "MUSIC_ROOT=") {
+			musicRoot = strings.TrimPrefix(env, "MUSIC_ROOT=")
+		}
+		if strings.HasPrefix(env, "ARCHIVES_ROOT=") {
+			archivesRoot = strings.TrimPrefix(env, "ARCHIVES_ROOT=")
+		}
 	}
 
-	for _, dir := range dirs {
+	for _, dir := range []string{dbDir, musicRoot, archivesRoot} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			fatal("Cannot create directory %s: %v", dir, err)
 		}
 	}
 
 	printOK("Data directories created")
-}
-
-func buildImages() {
-	printStep("Building Docker images (this may take a few minutes)...")
-
-	if err := composeBuild(); err != nil {
-		fatal("Docker image build failed: %v\nCheck your internet connection (Docker needs to pull base images).", err)
-	}
-
-	printOK("Docker images built successfully")
 }
 
 func setupHosts() {
@@ -195,22 +221,7 @@ func setupHosts() {
 	}
 }
 
-func startApp() {
-	printStep("Starting scdl-web...")
-
-	if err := composeUp(); err != nil {
-		fatal("Failed to start application: %v", err)
-	}
-
-	if waitForHealth(60 * time.Second) {
-		printOK("Application is healthy!")
-	} else {
-		printWarn("Application may still be starting. Check: scdl-web status")
-	}
-}
-
 func installBinary() {
-	// Copy the current binary to the bin directory
 	exe, err := os.Executable()
 	if err != nil {
 		printWarn("Could not determine executable path: %v", err)
@@ -219,7 +230,6 @@ func installBinary() {
 
 	dest := binPath()
 
-	// Don't copy if already in the right place
 	absExe, _ := filepath.Abs(exe)
 	absDest, _ := filepath.Abs(dest)
 	if absExe == absDest {
@@ -252,14 +262,12 @@ func installBinary() {
 		return
 	}
 
-	// Make executable on Unix
 	if runtime.GOOS != "windows" {
 		os.Chmod(dest, 0755)
 	}
 
 	printOK("scdl-web command installed to %s", dest)
 
-	// Check if bin dir is in PATH
 	pathEnv := os.Getenv("PATH")
 	if !strings.Contains(pathEnv, filepath.Dir(dest)) {
 		printWarn("%s is not in your PATH", filepath.Dir(dest))
@@ -281,7 +289,7 @@ func printSummary() {
 	fmt.Println("    scdl-web start      Start the application")
 	fmt.Println("    scdl-web stop       Stop the application")
 	fmt.Println("    scdl-web status     Show status")
-	fmt.Println("    scdl-web logs       View logs")
+	fmt.Println("    scdl-web logs       View backend logs")
 	fmt.Println("    scdl-web open       Open in browser")
 	fmt.Println("    scdl-web uninstall  Remove application")
 	fmt.Println()

@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings as app_settings
 from app.database import get_db
 from app.models.global_settings import GlobalSetting
 from app.schemas.settings import SettingsRead, SettingsUpdate
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-SETTING_KEYS = ["auth_token", "default_audio_format", "default_name_format"]
+SETTING_KEYS = ["auth_token", "default_audio_format", "default_name_format", "music_root"]
 
 
 async def _get_all_settings(db: AsyncSession) -> dict[str, str | None]:
@@ -24,6 +25,7 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         auth_token=settings.get("auth_token"),
         default_audio_format=settings.get("default_audio_format", "mp3"),
         default_name_format=settings.get("default_name_format"),
+        music_root=settings.get("music_root") or app_settings.music_root,
     )
 
 
@@ -41,4 +43,5 @@ async def update_settings(payload: SettingsUpdate, db: AsyncSession = Depends(ge
         auth_token=settings.get("auth_token"),
         default_audio_format=settings.get("default_audio_format", "mp3"),
         default_name_format=settings.get("default_name_format"),
+        music_root=settings.get("music_root") or app_settings.music_root,
     )

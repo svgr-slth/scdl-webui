@@ -1,7 +1,8 @@
-import { Card, Text, Badge, Group, Button, Stack, Progress } from "@mantine/core";
-import { IconPlayerPlay } from "@tabler/icons-react";
+import { Card, Text, Badge, Group, Button, ActionIcon, Stack, Progress, Tooltip } from "@mantine/core";
+import { IconPlayerPlay, IconFolder } from "@tabler/icons-react";
 import type { Source } from "../types/source";
 import { useNavigate } from "react-router-dom";
+import { useOpenFolder } from "../hooks/useSources";
 
 const typeLabels: Record<string, string> = {
   playlist: "Playlist",
@@ -27,6 +28,7 @@ interface Props {
 
 export function SourceCard({ source, onSync, progress, isSyncing }: Props) {
   const navigate = useNavigate();
+  const openFolder = useOpenFolder();
   const hasProgress = progress && progress.total > 0;
   const pct = hasProgress ? Math.round((progress.current / progress.total) * 100) : 0;
 
@@ -80,6 +82,11 @@ export function SourceCard({ source, onSync, progress, isSyncing }: Props) {
             )}
           </Group>
           <Group gap="xs">
+            <Tooltip label="Open folder">
+              <ActionIcon variant="subtle" onClick={() => openFolder.mutate(source.id)}>
+                <IconFolder size={16} />
+              </ActionIcon>
+            </Tooltip>
             <Button size="xs" variant="light" onClick={() => navigate(`/sources/${source.id}`)}>
               Details
             </Button>

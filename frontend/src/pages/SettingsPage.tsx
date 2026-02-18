@@ -9,6 +9,7 @@ export function SettingsPage() {
   const [authToken, setAuthToken] = useState("");
   const [defaultFormat, setDefaultFormat] = useState("mp3");
   const [nameFormat, setNameFormat] = useState("");
+  const [musicRoot, setMusicRoot] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -16,6 +17,7 @@ export function SettingsPage() {
       setAuthToken(settings.auth_token || "");
       setDefaultFormat(settings.default_audio_format || "mp3");
       setNameFormat(settings.default_name_format || "");
+      setMusicRoot(settings.music_root || "");
     }
   }, [settings]);
 
@@ -24,6 +26,7 @@ export function SettingsPage() {
       auth_token: authToken || null,
       default_audio_format: defaultFormat,
       default_name_format: nameFormat || null,
+      music_root: musicRoot || undefined,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -36,6 +39,13 @@ export function SettingsPage() {
       <Title order={2} mb="lg">Settings</Title>
       <Card withBorder p="lg" maw={600}>
         <Stack gap="md">
+          <TextInput
+            label="Music Root Path"
+            value={musicRoot}
+            onChange={(e) => setMusicRoot(e.currentTarget.value)}
+            placeholder="/home/user/Music"
+            description="Absolute path where music files are downloaded"
+          />
           <PasswordInput
             label="SoundCloud Auth Token"
             value={authToken}

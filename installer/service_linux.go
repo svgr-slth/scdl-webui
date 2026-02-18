@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,20 +11,14 @@ import (
 
 const systemServiceTemplate = `[Unit]
 Description=scdl-web - SoundCloud Downloader Web UI
-After=docker.service
-Requires=docker.service
+After=network.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
 WorkingDirectory={{INSTALL_DIR}}
-ExecStart=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml down
-ExecReload=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml restart
-TimeoutStartSec=120
-TimeoutStopSec=60
+ExecStart={{BIN_PATH}} start
 Restart=on-failure
-RestartSec=10
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
@@ -33,24 +26,20 @@ WantedBy=multi-user.target
 
 const userServiceTemplate = `[Unit]
 Description=scdl-web - SoundCloud Downloader Web UI
-After=docker.service
+After=network.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
 WorkingDirectory={{INSTALL_DIR}}
-ExecStart=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml down
-ExecReload=/usr/bin/docker compose -f {{INSTALL_DIR}}/docker-compose.yml restart
-TimeoutStartSec=120
-TimeoutStopSec=60
+ExecStart={{BIN_PATH}} start
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=default.target
 `
 
 func installService() {
-	// Check if systemd is available
 	if _, err := exec.LookPath("systemctl"); err != nil {
 		printWarn("systemd not found. Auto-start will not be configured.")
 		printInfo("Start manually with: scdl-web start")
@@ -60,10 +49,12 @@ func installService() {
 	printStep("Installing systemd service...")
 
 	iDir := installDir()
+	bp := binPath()
 
 	if isRoot() {
-		// System-wide service
-		content := strings.ReplaceAll(systemServiceTemplate, "{{INSTALL_DIR}}", iDir)
+		content := systemServiceTemplate
+		content = strings.ReplaceAll(content, "{{INSTALL_DIR}}", iDir)
+		content = strings.ReplaceAll(content, "{{BIN_PATH}}", bp)
 		servicePath := "/etc/systemd/system/scdl-web.service"
 
 		if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
@@ -76,7 +67,6 @@ func installService() {
 
 		printOK("Systemd service installed and enabled")
 	} else {
-		// User service
 		home, _ := os.UserHomeDir()
 		serviceDir := filepath.Join(home, ".config", "systemd", "user")
 		if err := os.MkdirAll(serviceDir, 0755); err != nil {
@@ -84,7 +74,9 @@ func installService() {
 			return
 		}
 
-		content := strings.ReplaceAll(userServiceTemplate, "{{INSTALL_DIR}}", iDir)
+		content := userServiceTemplate
+		content = strings.ReplaceAll(content, "{{INSTALL_DIR}}", iDir)
+		content = strings.ReplaceAll(content, "{{BIN_PATH}}", bp)
 		servicePath := filepath.Join(serviceDir, "scdl-web.service")
 
 		if err := os.WriteFile(servicePath, []byte(content), 0644); err != nil {
@@ -95,7 +87,6 @@ func installService() {
 		exec.Command("systemctl", "--user", "daemon-reload").Run()
 		exec.Command("systemctl", "--user", "enable", "scdl-web.service").Run()
 
-		// Enable lingering so service runs even when user is not logged in
 		user := os.Getenv("USER")
 		if user != "" {
 			exec.Command("loginctl", "enable-linger", user).Run()
@@ -126,12 +117,4 @@ func removeService() {
 	}
 
 	printOK("Systemd service removed")
-}
-
-func formatServicePath() string {
-	if isRoot() {
-		return "/etc/systemd/system/scdl-web.service"
-	}
-	home, _ := os.UserHomeDir()
-	return fmt.Sprintf("%s/.config/systemd/user/scdl-web.service", home)
 }

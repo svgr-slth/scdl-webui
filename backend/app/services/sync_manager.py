@@ -1,6 +1,7 @@
 import asyncio
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -22,6 +23,12 @@ class SyncManager:
     @property
     def runner(self) -> ScdlRunner:
         return self._runner
+
+    async def get_current_music_root(self) -> Path:
+        """Read music_root from DB settings, falling back to env var default."""
+        async with async_session() as db:
+            row = await db.get(GlobalSetting, "music_root")
+            return Path(row.value if row and row.value else settings.music_root)
 
     def set_ws_manager(self, ws_manager):
         self._ws_manager = ws_manager
@@ -79,6 +86,11 @@ class SyncManager:
             # Get auth token
             token_row = await db.get(GlobalSetting, "auth_token")
             auth_token = token_row.value if token_row else None
+
+            # Read current music_root setting
+            music_root_row = await db.get(GlobalSetting, "music_root")
+            current_music_root = music_root_row.value if music_root_row and music_root_row.value else settings.music_root
+            self._runner.music_root = Path(current_music_root)
 
             # Create sync run
             run = SyncRun(source_id=source_id, status="running")

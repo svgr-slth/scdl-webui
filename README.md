@@ -1,6 +1,18 @@
 # scdl-web
 
-Interface web pour synchroniser et gérer vos téléchargements SoundCloud. Un seul binaire pour installer, configurer et lancer l'application sur Linux, Windows ou macOS.
+Interface web pour synchroniser et gérer vos téléchargements SoundCloud. Un seul binaire pour installer, configurer et lancer l'application sur Linux, Windows ou macOS — sans Docker.
+
+## Sommaire
+
+- [Fonctionnalités](#fonctionnalités)
+- [Installation](#installation) — [Linux](#linux) · [Windows](#windows) · [macOS](#macos) · [Manuelle](#installation-manuelle)
+- [Utilisation](#utilisation)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Développement](#développement)
+- [Désinstallation](#désinstallation)
+
+---
 
 ## Fonctionnalités
 
@@ -8,63 +20,60 @@ Interface web pour synchroniser et gérer vos téléchargements SoundCloud. Un s
 - **Synchronisation intelligente** : archive les tracks déjà téléchargés, détecte les nouveaux
 - **Suivi en temps réel** : progression et logs via WebSocket
 - **Multi-formats** : MP3, FLAC, Opus
+- **Téléchargement flexible** : choisissez n'importe quel dossier de votre machine comme destination
 - **Auto-start** : service systemd (Linux), Task Scheduler (Windows), launchd (macOS)
 - **Domaine local** : accessible via `http://scdl.local`
+- **Zéro Docker** : fonctionne nativement avec Python et FFmpeg
 
 ---
 
 ## Installation
 
-L'installeur télécharge et configure automatiquement Docker, build les images, configure le domaine local `scdl.local`, et démarre l'application.
+Téléchargez l'exécutable pour votre OS depuis la [page Releases](https://github.com/svgr-slth/scdl-webui/releases/latest), puis lancez-le. L'installeur configure automatiquement Python, FFmpeg, les dépendances, le domaine local `scdl.local`, et démarre l'application.
 
 ### Linux
 
-Téléchargez le binaire correspondant à votre architecture :
-
 | Architecture | Fichier |
 |---|---|
-| x86_64 (Intel/AMD) | `scdl-web-linux-amd64` |
-| ARM64 (Raspberry Pi, etc.) | `scdl-web-linux-arm64` |
+| x86_64 (Intel/AMD) | [`scdl-web-linux-amd64`](https://github.com/svgr-slth/scdl-webui/releases/latest/download/scdl-web-linux-amd64) |
+| ARM64 (Raspberry Pi, etc.) | [`scdl-web-linux-arm64`](https://github.com/svgr-slth/scdl-webui/releases/latest/download/scdl-web-linux-arm64) |
 
 ```bash
 # Rendre exécutable
 chmod +x scdl-web-linux-amd64
 
-# Installer (droits root requis pour Docker, /etc/hosts, systemd)
+# Installer (droits root recommandés pour apt, /etc/hosts, systemd)
 sudo ./scdl-web-linux-amd64 install
 ```
 
 **Ce que fait l'installeur :**
-1. Installe Docker Engine via le script officiel (`get.docker.com`) si absent
-2. Ajoute l'utilisateur au groupe `docker`
-3. Extrait les fichiers dans `/opt/scdl-web`
-4. Build les images Docker
+1. Installe Python 3.10+ et FFmpeg via le gestionnaire de paquets (apt, dnf ou pacman)
+2. Extrait les fichiers backend dans `/opt/scdl-web`
+3. Crée un environnement virtuel Python et installe les dépendances
+4. Crée le fichier `.env` avec les chemins configurables
 5. Ajoute `127.0.0.1 scdl.local` dans `/etc/hosts`
 6. Crée et active un service systemd `scdl-web.service`
-7. Démarre l'application
-8. Installe la commande `scdl-web` dans `/usr/local/bin/`
+7. Installe la commande `scdl-web` dans `/usr/local/bin/`
 
 **Chemins d'installation :**
 
 ```
 /opt/scdl-web/                  # Fichiers de l'application
+/opt/scdl-web/backend/          # Code backend Python
+/opt/scdl-web/venv/             # Environnement virtuel Python
 /opt/scdl-web/data/             # Données (base de données, musique, archives)
 /opt/scdl-web/.env              # Configuration
 /usr/local/bin/scdl-web         # Commande CLI
 /etc/systemd/system/scdl-web.service
 ```
 
-> **Note** : Si vous ne souhaitez pas utiliser `sudo`, l'installation en mode utilisateur est possible mais Docker doit déjà être installé et votre utilisateur doit être dans le groupe `docker`. Les fichiers seront installés dans `~/.local/share/scdl-web` et le binaire dans `~/.local/bin/`.
-
-> **Note** : Après l'ajout au groupe `docker`, une déconnexion/reconnexion peut être nécessaire.
+> **Note** : Si vous ne souhaitez pas utiliser `sudo`, l'installation en mode utilisateur est possible mais Python 3.10+ et FFmpeg doivent déjà être installés. Les fichiers seront installés dans `~/.local/share/scdl-web` et le binaire dans `~/.local/bin/`.
 
 ---
 
 ### Windows
 
-**Prérequis** : Windows 10/11 avec WSL2 activé (requis par Docker Desktop).
-
-1. Téléchargez `scdl-web-windows-amd64.exe`
+1. Téléchargez [`scdl-web-windows-amd64.exe`](https://github.com/svgr-slth/scdl-webui/releases/latest/download/scdl-web-windows-amd64.exe)
 2. Ouvrez un terminal **en tant qu'administrateur** (PowerShell ou cmd)
 3. Exécutez :
 
@@ -73,35 +82,34 @@ sudo ./scdl-web-linux-amd64 install
 ```
 
 **Ce que fait l'installeur :**
-1. Installe Docker Desktop via `winget` si absent (un redémarrage peut être nécessaire)
-2. Extrait les fichiers dans `%LOCALAPPDATA%\scdl-web`
-3. Build les images Docker
-4. Ajoute `127.0.0.1 scdl.local` dans `C:\Windows\System32\drivers\etc\hosts`
-5. Crée une tâche planifiée pour le démarrage automatique
-6. Démarre l'application
+1. Installe Python 3.12 via `winget` si absent
+2. Installe FFmpeg via `winget` si absent
+3. Extrait les fichiers dans `%LOCALAPPDATA%\scdl-web`
+4. Crée un environnement virtuel Python et installe les dépendances
+5. Ajoute `127.0.0.1 scdl.local` dans `C:\Windows\System32\drivers\etc\hosts`
+6. Crée une tâche planifiée pour le démarrage automatique
+7. Installe la commande `scdl-web` dans le PATH
 
 **Chemins d'installation :**
 
 ```
 %LOCALAPPDATA%\scdl-web\            # Fichiers de l'application
+%LOCALAPPDATA%\scdl-web\backend\    # Code backend Python
+%LOCALAPPDATA%\scdl-web\venv\       # Environnement virtuel Python
 %LOCALAPPDATA%\scdl-web\data\       # Données
 %LOCALAPPDATA%\scdl-web\.env        # Configuration
 ```
 
-> **Note** : Si `winget` n'est pas disponible, l'installeur vous guidera pour télécharger Docker Desktop manuellement. Après installation de Docker Desktop, relancez `scdl-web.exe install`.
-
-> **Note** : Docker Desktop doit être configuré pour démarrer avec Windows (activé par défaut).
+> **Note** : Si `winget` n'est pas disponible, l'installeur vous guidera pour installer Python et FFmpeg manuellement.
 
 ---
 
 ### macOS
 
-Téléchargez le binaire correspondant à votre Mac :
-
 | Processeur | Fichier |
 |---|---|
-| Apple Silicon (M1, M2, M3, M4) | `scdl-web-darwin-arm64` |
-| Intel | `scdl-web-darwin-amd64` |
+| Apple Silicon (M1, M2, M3, M4) | [`scdl-web-darwin-arm64`](https://github.com/svgr-slth/scdl-webui/releases/latest/download/scdl-web-darwin-arm64) |
+| Intel | [`scdl-web-darwin-amd64`](https://github.com/svgr-slth/scdl-webui/releases/latest/download/scdl-web-darwin-amd64) |
 
 ```bash
 chmod +x scdl-web-darwin-arm64
@@ -111,40 +119,49 @@ sudo ./scdl-web-darwin-arm64 install
 ```
 
 **Ce que fait l'installeur :**
-1. Installe Docker Desktop via Homebrew (`brew install --cask docker`) si absent
+1. Installe Python 3.12 et FFmpeg via Homebrew si absents
 2. Extrait les fichiers dans `/opt/scdl-web`
-3. Build les images Docker
+3. Crée un environnement virtuel Python et installe les dépendances
 4. Ajoute `127.0.0.1 scdl.local` dans `/etc/hosts`
 5. Crée un service launchd pour le démarrage automatique
-6. Démarre l'application
-7. Installe la commande `scdl-web` dans `/usr/local/bin/`
+6. Installe la commande `scdl-web` dans `/usr/local/bin/`
 
-> **Note** : Docker Desktop doit être lancé au moins une fois après installation pour terminer la configuration. L'installeur vous le signalera si nécessaire.
+> **Note** : Homebrew est requis pour installer automatiquement les dépendances. Si Homebrew n'est pas installé, l'installeur vous indiquera comment procéder.
 
 ---
 
-### Installation manuelle (Docker Compose)
+### Installation manuelle
 
-Si vous préférez ne pas utiliser l'installeur, vous pouvez lancer le projet directement avec Docker Compose :
+Si vous préférez ne pas utiliser l'installeur :
 
 ```bash
-git clone <repo-url> scdl-web
+git clone https://github.com/svgr-slth/scdl-webui.git scdl-web
 cd scdl-web
+
+# Prérequis
+# Python 3.10+, FFmpeg, Node.js 18+
 
 # Créer le fichier de configuration
 cp .env.example .env
+# Éditer .env pour configurer les chemins (MUSIC_ROOT, etc.)
+
+# Backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r backend/requirements.txt
+
+# Frontend
+cd frontend && npm install && npm run build && cd ..
 
 # Créer les dossiers de données
 mkdir -p data/db data/music data/archives
 
-# Build et lancement
-docker compose up -d
+# Lancer le backend
+cd backend && uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 # Ajouter le domaine local (optionnel)
 echo "127.0.0.1 scdl.local" | sudo tee -a /etc/hosts
 ```
-
-L'application sera accessible sur `http://localhost` (ou `http://scdl.local` si vous avez configuré le hosts).
 
 ---
 
@@ -156,9 +173,8 @@ Après installation, gérez l'application avec la commande `scdl-web` :
 scdl-web start       # Démarrer l'application
 scdl-web stop        # Arrêter l'application
 scdl-web restart     # Redémarrer
-scdl-web status      # Voir l'état des conteneurs et la santé de l'app
+scdl-web status      # Voir l'état de l'application et la santé
 scdl-web logs        # Afficher les logs
-scdl-web logs -f     # Suivre les logs en temps réel
 scdl-web open        # Ouvrir l'interface web dans le navigateur
 scdl-web uninstall   # Désinstaller (les données sont préservées)
 ```
@@ -170,9 +186,15 @@ scdl-web uninstall   # Désinstaller (les données sont préservées)
 Le fichier `.env` dans le répertoire d'installation contient la configuration :
 
 ```env
-DATABASE_URL=sqlite+aiosqlite:////data/db/scdl-web.db
-MUSIC_ROOT=/data/music
-ARCHIVES_ROOT=/data/archives
+DATABASE_URL=sqlite+aiosqlite:////<data-dir>/db/scdl-web.db
+MUSIC_ROOT=/<data-dir>/music
+ARCHIVES_ROOT=/<data-dir>/archives
+```
+
+**Changer le dossier de téléchargement** : modifiez `MUSIC_ROOT` pour pointer vers n'importe quel dossier de votre machine, par exemple :
+
+```env
+MUSIC_ROOT=/home/user/Musique/SoundCloud
 ```
 
 Les réglages SoundCloud (token d'authentification, format audio par défaut) se configurent dans l'interface web via la page **Settings**.
@@ -185,22 +207,25 @@ Les réglages SoundCloud (token d'authentification, format audio par défaut) se
 Navigateur (http://scdl.local)
     |
     v
-Nginx (frontend, port 80)
-    |-- /           --> React SPA (fichiers statiques)
-    |-- /api/*      --> Backend FastAPI (port 8000)
-    |-- /ws/*       --> WebSocket (progression sync)
+Binaire Go scdl-web (port 80)
+    |-- /           --> Frontend React (fichiers statiques embarqués)
+    |-- /api/*      --> Reverse proxy → Backend Python (port 8000)
+    |-- /ws/*       --> Proxy WebSocket → Backend Python
+    |
+    └── gère → subprocess Python uvicorn (127.0.0.1:8000)
 
-Backend FastAPI
+Backend FastAPI (uvicorn)
     |-- SQLite          (base de données)
     |-- scdl            (téléchargement SoundCloud)
     |-- FFmpeg          (conversion audio)
-    |-- /data/music     (fichiers téléchargés)
+    |-- ~/Musique/...   (fichiers téléchargés, chemin configurable)
 ```
 
 **Stack technique :**
 - **Frontend** : React 18, TypeScript, Mantine UI, TanStack Query, Vite
 - **Backend** : FastAPI, SQLAlchemy (async), Pydantic, scdl
-- **Infrastructure** : Docker, Docker Compose, Nginx
+- **Serveur** : binaire Go (HTTP server + reverse proxy + WebSocket proxy)
+- **Aucune dépendance lourde** : pas de Docker, pas de Nginx
 
 ---
 
@@ -208,8 +233,9 @@ Backend FastAPI
 
 ### Prérequis
 
-- Go 1.21+ (pour compiler l'installeur)
-- Docker et Docker Compose (pour lancer l'application)
+- Go 1.23+ (pour compiler le binaire)
+- Node.js 18+ (pour builder le frontend)
+- Python 3.10+, FFmpeg (pour le runtime)
 
 ### Build depuis les sources
 
@@ -235,6 +261,17 @@ dist/
   scdl-web-darwin-arm64
 ```
 
+### Créer une release
+
+Les releases sont automatisées via GitHub Actions. Pour publier une nouvelle version :
+
+```bash
+git tag v1.0.0
+git push --tags
+```
+
+Le pipeline build le frontend, compile les 5 binaires et les publie sur la [page Releases](https://github.com/svgr-slth/scdl-webui/releases).
+
 ---
 
 ## Désinstallation
@@ -244,8 +281,8 @@ scdl-web uninstall
 ```
 
 La commande :
-- Arrête les conteneurs Docker
+- Arrête le serveur et le backend Python
 - Supprime le service de démarrage automatique
 - Retire `scdl.local` du fichier hosts
-- Supprime les fichiers d'installation
+- Supprime les fichiers d'installation (backend, venv)
 - **Préserve vos données** (musique, base de données) dans un dossier de backup

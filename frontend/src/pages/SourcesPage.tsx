@@ -1,7 +1,7 @@
-import { Title, Button, Group, Modal, Table, ActionIcon, Alert, Stack, Text, Checkbox } from "@mantine/core";
-import { IconPlus, IconTrash, IconEdit } from "@tabler/icons-react";
+import { Title, Button, Group, Modal, Table, ActionIcon, Alert, Stack, Text, Checkbox, Tooltip } from "@mantine/core";
+import { IconPlus, IconTrash, IconEdit, IconFolder } from "@tabler/icons-react";
 import { useState } from "react";
-import { useSources, useCreateSource, useDeleteSource } from "../hooks/useSources";
+import { useSources, useCreateSource, useDeleteSource, useOpenFolder } from "../hooks/useSources";
 import { SourceForm } from "../components/SourceForm";
 import { StatusBadge } from "../components/StatusBadge";
 import type { SourceCreate } from "../types/source";
@@ -11,6 +11,7 @@ export function SourcesPage() {
   const { data: sources, isLoading } = useSources();
   const createSource = useCreateSource();
   const deleteSource = useDeleteSource();
+  const openFolder = useOpenFolder();
   const navigate = useNavigate();
   const [opened, setOpened] = useState(false);
 
@@ -107,6 +108,11 @@ export function SourcesPage() {
                 </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
+                    <Tooltip label="Open folder">
+                      <ActionIcon variant="subtle" onClick={(e) => { e.stopPropagation(); openFolder.mutate(s.id); }}>
+                        <IconFolder size={16} />
+                      </ActionIcon>
+                    </Tooltip>
                     <ActionIcon variant="subtle" onClick={() => navigate(`/sources/${s.id}`)}>
                       <IconEdit size={16} />
                     </ActionIcon>

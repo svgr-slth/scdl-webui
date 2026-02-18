@@ -8,4 +8,6 @@ export const sourcesApi = {
   update: (id: number, data: SourceUpdate) => api.put<Source>(`/sources/${id}`, data),
   delete: (id: number, deleteFiles: boolean = false) =>
     api.delete(`/sources/${id}?delete_files=${deleteFiles}`),
+  openFolder: (id: number) =>
+    api.post<{ status: string; path: string }>(`/sources/${id}/open-folder`),
 };

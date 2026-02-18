@@ -30,12 +30,20 @@ func dataDir() string {
 	return filepath.Join(installDir(), "data")
 }
 
-func composeFile() string {
-	return filepath.Join(installDir(), "docker-compose.yml")
+func backendDir() string {
+	return filepath.Join(installDir(), "backend")
+}
+
+func venvDir() string {
+	return filepath.Join(installDir(), "venv")
 }
 
 func envFile() string {
 	return filepath.Join(installDir(), ".env")
+}
+
+func pidFile() string {
+	return filepath.Join(installDir(), "scdl-web.pid")
 }
 
 func binDir() string {
@@ -61,7 +69,6 @@ func binPath() string {
 
 func isRoot() bool {
 	if runtime.GOOS == "windows" {
-		// On Windows, check for admin by trying to read a protected path
 		_, err := os.Open(`\\.\PHYSICALDRIVE0`)
 		return err == nil
 	}

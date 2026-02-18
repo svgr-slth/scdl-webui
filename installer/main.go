@@ -50,7 +50,7 @@ func cmdHelp() {
 Usage: scdl-web <command> [options]
 
 Commands:
-  install     Install scdl-web (Docker, images, services, hosts)
+  install     Install scdl-web (Python, dependencies, services, hosts)
   start       Start the application
   stop        Stop the application
   restart     Restart the application

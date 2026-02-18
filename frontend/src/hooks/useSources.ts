@@ -36,6 +36,12 @@ export function useDeleteSource() {
   });
 }
 
+export function useOpenFolder() {
+  return useMutation({
+    mutationFn: (sourceId: number) => sourcesApi.openFolder(sourceId),
+  });
+}
+
 export function useResetArchive() {
   const qc = useQueryClient();
   return useMutation({
