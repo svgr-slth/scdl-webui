@@ -101,13 +101,32 @@ func pipInstall() error {
 func startBackend(envVars []string) (*exec.Cmd, error) {
 	uvicorn := venvBin("uvicorn")
 
+	// Prepend venv Scripts/bin to PATH so subprocesses (scdl, ffmpeg…) are found.
+	// We de-duplicate PATH to avoid glibc picking the old entry (first match wins).
+	var venvScriptsDir string
+	if runtime.GOOS == "windows" {
+		venvScriptsDir = filepath.Join(venvDir(), "Scripts")
+	} else {
+		venvScriptsDir = filepath.Join(venvDir(), "bin")
+	}
+	newPath := venvScriptsDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	env := make([]string, 0, len(os.Environ())+len(envVars)+1)
+	for _, e := range os.Environ() {
+		key := strings.SplitN(e, "=", 2)[0]
+		if !strings.EqualFold(key, "PATH") {
+			env = append(env, e)
+		}
+	}
+	env = append(env, "PATH="+newPath)
+	env = append(env, envVars...)
+
 	cmd := exec.Command(uvicorn,
 		"app.main:app",
 		"--host", "127.0.0.1",
 		"--port", "8000",
 	)
 	cmd.Dir = backendDir()
-	cmd.Env = append(os.Environ(), envVars...)
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
