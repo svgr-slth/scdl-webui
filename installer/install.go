@@ -173,8 +173,10 @@ func createEnvFile() {
 
 	// Replace Docker paths with host paths
 	content := string(data)
+	// SQLAlchemy database URLs require forward slashes, even on Windows
+	dbPath := filepath.ToSlash(filepath.Join(dataDir(), "db", "scdl-web.db"))
 	content = strings.ReplaceAll(content, "sqlite+aiosqlite:////data/db/scdl-web.db",
-		fmt.Sprintf("sqlite+aiosqlite:///%s", filepath.Join(dataDir(), "db", "scdl-web.db")))
+		fmt.Sprintf("sqlite+aiosqlite:///%s", dbPath))
 	content = strings.ReplaceAll(content, "/data/music", filepath.Join(dataDir(), "music"))
 	content = strings.ReplaceAll(content, "/data/archives", filepath.Join(dataDir(), "archives"))
 
