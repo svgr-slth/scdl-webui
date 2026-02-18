@@ -58,7 +58,10 @@ jobs:
 
       - name: Build Windows + NSIS installer
         if: runner.os == 'Windows'
-        run: wails build -clean -platform windows/amd64 -nsis
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Program Files (x86)\NSIS;$env:PATH"
+          wails build -clean -platform windows/amd64 -nsis
 
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
