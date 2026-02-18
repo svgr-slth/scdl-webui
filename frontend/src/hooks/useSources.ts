@@ -39,6 +39,12 @@ export function useDeleteSource() {
 export function useOpenFolder() {
   return useMutation({
     mutationFn: (sourceId: number) => sourcesApi.openFolder(sourceId),
+    onSuccess: (data) => {
+      if (data.status === "path_only") {
+        navigator.clipboard.writeText(data.path).catch(() => {});
+        window.alert(`Folder path copied to clipboard:\n${data.path}`);
+      }
+    },
   });
 }
 

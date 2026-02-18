@@ -28,7 +28,7 @@ export function SettingsPage() {
       auth_token: authToken || null,
       default_audio_format: defaultFormat,
       default_name_format: nameFormat || null,
-      music_root: musicRoot || undefined,
+      music_root: musicRoot || null,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
