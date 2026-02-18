@@ -16,13 +16,10 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux/amd64
-            artifact: scdl-web-linux-amd64
           - os: windows-latest
             platform: windows/amd64
-            artifact: scdl-web-windows-amd64.exe
           - os: macos-latest
             platform: darwin/universal
-            artifact: scdl-web-darwin-universal
 
     runs-on: ${{ matrix.os }}
 
@@ -40,31 +37,92 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
+      # ── Linux dependencies ────────────────────────────────────────────────
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libappindicator3-dev \
+            libfuse2
 
       - name: Bundle backend files
         run: make bundle
 
-      - name: Build
-        run: wails build -clean -platform ${{ matrix.platform }}
+      # ── Windows: NSIS installer ──────────────────────────────────────────
+      - name: Install NSIS (Windows)
+        if: runner.os == 'Windows'
+        run: choco install nsis --no-progress -y
 
-      - name: Rename artifact (Linux)
-        if: runner.os == 'Linux'
-        run: mv build/bin/scdl-web build/bin/${{ matrix.artifact }}
+      - name: Build Windows + NSIS installer
+        if: runner.os == 'Windows'
+        run: wails build -clean -platform windows/amd64 -nsis
 
-      - name: Rename artifact (macOS)
-        if: runner.os == 'macOS'
-        run: mv build/bin/scdl-web build/bin/${{ matrix.artifact }}
+      - name: Rename Windows installer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: mv build/bin/scdl-web-amd64-installer.exe build/bin/scdl-web-windows-amd64-installer.exe
 
-      - name: Upload artifact
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: build/bin/${{ matrix.artifact }}*
+          name: scdl-web-windows-amd64-installer
+          path: build/bin/scdl-web-windows-amd64-installer.exe
+
+      # ── macOS: DMG ───────────────────────────────────────────────────────
+      - name: Build macOS
+        if: runner.os == 'macOS'
+        run: wails build -clean -platform darwin/universal
+
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil create \
+            -volname "scdl-web" \
+            -srcfolder "build/bin/scdl-web.app" \
+            -ov \
+            -format UDZO \
+            "build/bin/scdl-web-darwin-universal.dmg"
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scdl-web-darwin-universal-dmg
+          path: build/bin/scdl-web-darwin-universal.dmg
+
+      # ── Linux: AppImage ──────────────────────────────────────────────────
+      - name: Build Linux
+        if: runner.os == 'Linux'
+        run: wails build -clean -platform linux/amd64
+
+      - name: Download appimagetool
+        if: runner.os == 'Linux'
+        run: |
+          wget -q \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -O /usr/local/bin/appimagetool
+          chmod +x /usr/local/bin/appimagetool
+
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp build/bin/scdl-web AppDir/usr/bin/scdl-web
+          cp build/appicon.png AppDir/scdl-web.png
+          cp build/linux/scdl-web.desktop AppDir/scdl-web.desktop
+          sed -i 's|Exec=.*|Exec=scdl-web|' AppDir/scdl-web.desktop
+          ARCH=x86_64 appimagetool AppDir build/bin/scdl-web-linux-amd64.AppImage
+
+      - name: Upload Linux artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scdl-web-linux-amd64-appimage
+          path: build/bin/scdl-web-linux-amd64.AppImage
 
   release:
     needs: build
@@ -74,7 +132,7 @@ jobs:
         with:
           path: artifacts
 
-      - name: Collect binaries
+      - name: Collect release files
         run: |
           mkdir -p release
           find artifacts -type f -exec cp {} release/ \;

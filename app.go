@@ -14,6 +14,7 @@ import (
 type App struct {
 	ctx        context.Context
 	backendCmd *exec.Cmd
+	quitting   bool // true = real quit from tray, false = hide-to-tray on window close
 }
 
 // NewApp creates a new App instance.
