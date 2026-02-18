@@ -1,7 +1,9 @@
 import asyncio
 import json
 import logging
+import os
 import re
+import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +11,30 @@ from pathlib import Path
 from app.models.source import Source
 
 logger = logging.getLogger(__name__)
+
+
+def _find_scdl() -> str:
+    """Return the full path to the scdl executable.
+
+    Looks in the same Scripts/bin directory as the running Python interpreter
+    first (reliable inside a venv), then falls back to PATH via shutil.which.
+    """
+    import shutil
+
+    scripts_dir = os.path.dirname(os.path.abspath(sys.executable))
+    name = "scdl.exe" if sys.platform == "win32" else "scdl"
+    candidate = os.path.join(scripts_dir, name)
+    if os.path.isfile(candidate):
+        return candidate
+
+    found = shutil.which("scdl")
+    if found:
+        return found
+
+    raise FileNotFoundError(
+        f"scdl not found next to {sys.executable} or in PATH. "
+        "Ensure scdl is installed in the virtual environment."
+    )
 
 
 @dataclass
@@ -117,7 +143,7 @@ class ScdlRunner:
     # ── Command building ─────────────────────────────────────────
 
     def build_command(self, source: Source, auth_token: str | None = None) -> list[str]:
-        cmd = ["scdl", "-l", source.url]
+        cmd = [_find_scdl(), "-l", source.url]
 
         type_flags: dict[str, list[str]] = {
             "likes": ["-f"],
