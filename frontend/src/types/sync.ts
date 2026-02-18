@@ -25,6 +25,7 @@ export interface WsMessage {
   type: "log" | "status" | "stats" | "progress";
   line?: string;
   status?: string;
+  error?: string;
   added?: number;
   removed?: number;
   skipped?: number;

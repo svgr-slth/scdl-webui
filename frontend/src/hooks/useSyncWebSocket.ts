@@ -9,6 +9,7 @@ interface LogLine {
 export function useSyncWebSocket(sourceId: number | null) {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [status, setStatus] = useState<string>("idle");
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<{ added: number; removed: number; skipped: number } | null>(null);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [connected, setConnected] = useState(false);
@@ -17,6 +18,7 @@ export function useSyncWebSocket(sourceId: number | null) {
   const clear = useCallback(() => {
     setLogs([]);
     setStatus("idle");
+    setError(null);
     setStats(null);
     setProgress(null);
   }, []);
@@ -48,6 +50,7 @@ export function useSyncWebSocket(sourceId: number | null) {
           break;
         case "status":
           if (msg.status) setStatus(msg.status);
+          setError(msg.error ?? null);
           break;
         case "stats":
           setStats({
@@ -76,5 +79,5 @@ export function useSyncWebSocket(sourceId: number | null) {
     };
   }, [sourceId]);
 
-  return { logs, status, stats, progress, clear, connected };
+  return { logs, status, error, stats, progress, clear, connected };
 }

@@ -172,10 +172,10 @@ class SyncManager:
                         "removed": result.tracks_removed,
                         "skipped": result.tracks_skipped,
                     })
-                    await self._ws_manager.broadcast(source_id, {
-                        "type": "status",
-                        "status": run.status,
-                    })
+                    msg: dict = {"type": "status", "status": run.status}
+                    if not result.success:
+                        msg["error"] = run.error_message
+                    await self._ws_manager.broadcast(source_id, msg)
 
             except asyncio.CancelledError:
                 run.status = "cancelled"
@@ -195,6 +195,7 @@ class SyncManager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "status",
                         "status": "failed",
+                        "error": str(e),
                     })
             finally:
                 self.active_tasks.pop(source_id, None)

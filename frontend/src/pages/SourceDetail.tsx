@@ -37,7 +37,7 @@ export function SourceDetail() {
   }, [sourceId]);
 
   // Connect WebSocket when syncing
-  const { logs, status, stats, progress, clear, connected } = useSyncWebSocket(isSyncing ? sourceId : null);
+  const { logs, status, error, stats, progress, clear, connected } = useSyncWebSocket(isSyncing ? sourceId : null);
 
   // When WS is connected and we have a pending sync, trigger it
   useEffect(() => {
@@ -148,7 +148,7 @@ export function SourceDetail() {
             )}
             {status === "failed" && (
               <Alert color="red" mt="sm">
-                Sync failed
+                Sync failed{error ? `: ${error}` : ""}
               </Alert>
             )}
           </>
