@@ -2,7 +2,6 @@ import { AppShell, Group, NavLink, Title, useMantineColorScheme, ActionIcon } fr
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   IconDashboard,
-  IconPlaylist,
   IconHistory,
   IconSettings,
   IconSun,
@@ -11,7 +10,6 @@ import {
 
 const navItems = [
   { label: "Dashboard", icon: IconDashboard, path: "/" },
-  { label: "Sources", icon: IconPlaylist, path: "/sources" },
   { label: "History", icon: IconHistory, path: "/history" },
   { label: "Settings", icon: IconSettings, path: "/settings" },
 ];
@@ -37,7 +35,7 @@ export function Layout() {
             leftSection={<item.icon size={18} />}
             active={
               item.path === "/"
-                ? location.pathname === "/"
+                ? location.pathname === "/" || location.pathname.startsWith("/sources")
                 : location.pathname.startsWith(item.path)
             }
             onClick={() => navigate(item.path)}

@@ -1,5 +1,5 @@
 import { Card, Text, Badge, Group, Button, ActionIcon, Stack, Progress, Tooltip } from "@mantine/core";
-import { IconPlayerPlay, IconFolder } from "@tabler/icons-react";
+import { IconPlayerPlay, IconFolder, IconTrash } from "@tabler/icons-react";
 import type { Source } from "../types/source";
 import { useNavigate } from "react-router-dom";
 import { useOpenFolder } from "../hooks/useSources";
@@ -22,11 +22,12 @@ const statusColors: Record<string, string> = {
 interface Props {
   source: Source;
   onSync: (id: number) => void;
+  onDelete: (id: number, name: string) => void;
   progress?: { current: number; total: number } | null;
   isSyncing?: boolean;
 }
 
-export function SourceCard({ source, onSync, progress, isSyncing }: Props) {
+export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Props) {
   const navigate = useNavigate();
   const openFolder = useOpenFolder();
   const hasProgress = progress && progress.total > 0;
@@ -85,6 +86,11 @@ export function SourceCard({ source, onSync, progress, isSyncing }: Props) {
             <Tooltip label="Open folder">
               <ActionIcon variant="subtle" onClick={() => openFolder.mutate(source.id)}>
                 <IconFolder size={16} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Delete">
+              <ActionIcon variant="subtle" color="red" onClick={() => onDelete(source.id, source.name)}>
+                <IconTrash size={16} />
               </ActionIcon>
             </Tooltip>
             <Button size="xs" variant="light" onClick={() => navigate(`/sources/${source.id}`)}>

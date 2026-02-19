@@ -28,3 +28,12 @@ export interface SourceCreate {
 }
 
 export type SourceUpdate = Partial<SourceCreate>;
+
+export interface TrackFile {
+  name: string;
+  relative_path: string | null;
+  size: number;
+  modified_at: string | null;
+  status: "synced" | "missing" | "untracked";
+  track_id: string | null;
+}

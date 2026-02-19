@@ -55,3 +55,21 @@ export function useResetArchive() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sources"] }),
   });
 }
+
+export function useTracks(sourceId: number) {
+  return useQuery({
+    queryKey: ["sources", sourceId, "tracks"],
+    queryFn: () => sourcesApi.tracks(sourceId),
+  });
+}
+
+export function useDeleteTrack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, path, trackId }: { sourceId: number; path: string; trackId: string | null }) =>
+      sourcesApi.deleteTrack(sourceId, path, trackId),
+    onSuccess: (_, { sourceId }) =>
+      qc.invalidateQueries({ queryKey: ["sources", sourceId, "tracks"] }),
+  });
+}
+

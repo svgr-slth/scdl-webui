@@ -1,4 +1,8 @@
-const BASE_URL = "/api";
+// In Wails mode (wails:// protocol), WebKit2GTK only supports GET through the
+// custom scheme handler. Bypass it by calling the Python backend directly.
+export const BASE_URL = window.location.protocol === "wails:"
+  ? "http://127.0.0.1:8000/api"
+  : "/api";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

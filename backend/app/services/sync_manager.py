@@ -47,6 +47,9 @@ class SyncManager:
         return None
 
     async def start_sync(self, source_id: int) -> str:
+        from app.services.library_mover import library_mover
+        if library_mover.is_moving:
+            return "blocked_by_move"
         if source_id in self.active_tasks:
             return "already_running"
         task = asyncio.create_task(self._run_sync(source_id))
@@ -54,6 +57,9 @@ class SyncManager:
         return "started"
 
     async def start_sync_all(self) -> int:
+        from app.services.library_mover import library_mover
+        if library_mover.is_moving:
+            return 0
         async with async_session() as db:
             result = await db.execute(
                 select(Source).where(Source.sync_enabled == True).order_by(Source.name)
@@ -101,10 +107,10 @@ class SyncManager:
             # Init log buffer for this source
             self.log_buffers[source_id] = []
 
-            # Pre-sync: verify archived tracks still exist on disk
-            pruned = self._runner.verify_archive(source)
+            # Pre-sync: regenerate archive/sync files from disk state
+            pruned = self._runner.prepare_sync_files(source.id)
             if pruned > 0:
-                prune_msg = f"[pre-sync] Pruned {pruned} archive entries for missing files"
+                prune_msg = f"[pre-sync] {pruned} missing files will be re-downloaded"
                 self.log_buffers.setdefault(source_id, []).append(prune_msg)
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
