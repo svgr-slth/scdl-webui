@@ -11,6 +11,8 @@ import {
   Modal,
   Text,
   Progress,
+  Switch,
+  NumberInput,
 } from "@mantine/core";
 import { IconCheck, IconFolder, IconAlertTriangle } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
@@ -34,7 +36,10 @@ export function SettingsPage() {
   const [defaultFormat, setDefaultFormat] = useState("mp3");
   const [nameFormat, setNameFormat] = useState("");
   const [musicRoot, setMusicRoot] = useState("");
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [autoSyncInterval, setAutoSyncInterval] = useState<number>(60);
   const [saved, setSaved] = useState(false);
+  const [autoSyncSaved, setAutoSyncSaved] = useState(false);
   const [folderPickerOpened, setFolderPickerOpened] = useState(false);
 
   // Move library state
@@ -60,6 +65,8 @@ export function SettingsPage() {
       setNameFormat(settings.default_name_format || "");
       setMusicRoot(settings.music_root || "");
       originalMusicRoot.current = settings.music_root || "";
+      setAutoSyncEnabled(settings.auto_sync_enabled ?? false);
+      setAutoSyncInterval(settings.auto_sync_interval_minutes ?? 60);
     }
   }, [settings]);
 
@@ -220,6 +227,47 @@ export function SettingsPage() {
           )}
           {moveError && !isMoving && (
             <Alert color="red">{moveError}</Alert>
+          )}
+        </Stack>
+      </Card>
+
+      {/* Auto-sync card */}
+      <Card withBorder p="lg" maw={600} mt="md">
+        <Title order={4} mb="md">Auto Sync</Title>
+        <Stack gap="md">
+          <Switch
+            label="Enable automatic sync"
+            description="Periodically sync all enabled sources"
+            checked={autoSyncEnabled}
+            onChange={(e) => setAutoSyncEnabled(e.currentTarget.checked)}
+          />
+          <NumberInput
+            label="Interval (minutes)"
+            description="Time between automatic syncs"
+            value={autoSyncInterval}
+            onChange={(v) => setAutoSyncInterval(typeof v === "number" ? v : 60)}
+            min={5}
+            max={1440}
+            step={5}
+            disabled={!autoSyncEnabled}
+          />
+          <Button
+            onClick={async () => {
+              await updateSettings.mutateAsync({
+                auto_sync_enabled: autoSyncEnabled,
+                auto_sync_interval_minutes: autoSyncInterval,
+              });
+              setAutoSyncSaved(true);
+              setTimeout(() => setAutoSyncSaved(false), 3000);
+            }}
+            loading={updateSettings.isPending}
+          >
+            Save
+          </Button>
+          {autoSyncSaved && (
+            <Alert color="green" icon={<IconCheck size={16} />}>
+              Auto-sync settings saved
+            </Alert>
           )}
         </Stack>
       </Card>

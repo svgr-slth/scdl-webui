@@ -1,6 +1,7 @@
-import { Title, SimpleGrid, Button, Group, Alert, Modal, Stack, Text, Checkbox } from "@mantine/core";
+import { Title, SimpleGrid, Button, Group, Alert, Modal, Stack, Text, Checkbox, Badge } from "@mantine/core";
 import { IconRefresh, IconAlertCircle, IconPlus } from "@tabler/icons-react";
 import { useSources, useCreateSource, useDeleteSource } from "../hooks/useSources";
+import { useSettings } from "../hooks/useSettings";
 import { syncApi } from "../api/sync";
 import { SourceCard } from "../components/SourceCard";
 import { SourceForm } from "../components/SourceForm";
@@ -11,6 +12,7 @@ import type { SourceCreate } from "../types/source";
 
 export function Dashboard() {
   const { data: sources, isLoading, error } = useSources();
+  const { data: appSettings } = useSettings();
   const createSource = useCreateSource();
   const deleteSource = useDeleteSource();
   const qc = useQueryClient();
@@ -83,6 +85,11 @@ export function Dashboard() {
       <Group justify="space-between" mb="lg">
         <Title order={2}>Dashboard</Title>
         <Group gap="xs">
+          {appSettings?.auto_sync_enabled && (
+            <Badge variant="light" color="teal" size="lg">
+              Auto-sync: every {appSettings.auto_sync_interval_minutes} min
+            </Badge>
+          )}
           <Button leftSection={<IconPlus size={16} />} variant="light" onClick={() => setAddOpened(true)}>
             Add Source
           </Button>

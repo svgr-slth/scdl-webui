@@ -6,6 +6,8 @@ class SettingsRead(BaseModel):
     default_audio_format: str = "mp3"
     default_name_format: str | None = None
     music_root: str = "/data/music"
+    auto_sync_enabled: bool = False
+    auto_sync_interval_minutes: int = 60
 
 
 class SettingsUpdate(BaseModel):
@@ -13,3 +15,5 @@ class SettingsUpdate(BaseModel):
     default_audio_format: str | None = None
     default_name_format: str | None = None
     music_root: str | None = None
+    auto_sync_enabled: bool | None = None
+    auto_sync_interval_minutes: int | None = None

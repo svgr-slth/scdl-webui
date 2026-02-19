@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import init_db
 from app.routers import sources, settings, history, sync, filesystem
 from app.ws.sync_progress import ws_manager
+from app.services.auto_sync import auto_sync_scheduler
 from app.services.library_mover import library_mover
 from app.services.sync_manager import sync_manager
 
@@ -16,7 +17,9 @@ async def lifespan(app: FastAPI):
     sync_manager.set_ws_manager(ws_manager)
     library_mover.set_ws_manager(ws_manager)
     ws_manager.set_log_buffer_provider(lambda sid: sync_manager.log_buffers.get(sid))
+    await auto_sync_scheduler.start()
     yield
+    auto_sync_scheduler.stop()
 
 
 app = FastAPI(title="scdl-web", lifespan=lifespan)
