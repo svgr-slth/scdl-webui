@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime";
+import { WatchMoveLibrary, StopWatchMoveLibrary } from "../wailsjs/go/main/App";
 
 interface LogLine {
   line: string;
@@ -42,17 +44,7 @@ export function useMoveWebSocket(active: boolean) {
       return;
     }
 
-    const wsUrl =
-      window.location.protocol === "wails:"
-        ? "ws://127.0.0.1:8000/ws/move-library"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/move-library`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => setConnected(true);
-
-    ws.onmessage = (event) => {
-      const msg: MoveMessage = JSON.parse(event.data);
+    function handleMessage(msg: MoveMessage) {
       switch (msg.type) {
         case "log":
           if (msg.line !== undefined) {
@@ -69,6 +61,32 @@ export function useMoveWebSocket(active: boolean) {
           }
           break;
       }
+    }
+
+    // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
+    // connections. Use the Go-side bridge instead (mirrors useSyncWebSocket).
+    if (window.location.protocol === "wails:") {
+      WatchMoveLibrary();
+      setConnected(true);
+      EventsOn("move-library", (raw: string) => {
+        handleMessage(JSON.parse(raw));
+      });
+      return () => {
+        EventsOff("move-library");
+        StopWatchMoveLibrary();
+        setConnected(false);
+      };
+    }
+
+    // Dev / browser mode: connect directly via WebSocket.
+    const wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws/move-library`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => setConnected(true);
+
+    ws.onmessage = (event) => {
+      handleMessage(JSON.parse(event.data));
     };
 
     ws.onclose = () => {

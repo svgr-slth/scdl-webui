@@ -19,6 +19,8 @@ type App struct {
 	backendCmd       *exec.Cmd
 	quitting         bool // true = real quit from tray, false = hide-to-tray on window close
 	syncWatchCancels sync.Map
+	moveWatchCancel  context.CancelFunc
+	moveWatchMu      sync.Mutex
 }
 
 // NewApp creates a new App instance.
@@ -155,6 +157,139 @@ func (a *App) StopWatchSync(sourceId int) {
 	if v, ok := a.syncWatchCancels.Load(sourceId); ok {
 		v.(context.CancelFunc)()
 	}
+}
+
+// WatchMoveLibrary opens a WebSocket to the backend and relays move-library
+// progress messages to the frontend via Wails events (mirrors WatchSync).
+func (a *App) WatchMoveLibrary() {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.moveWatchMu.Lock()
+	if a.moveWatchCancel != nil {
+		a.moveWatchCancel()
+	}
+	a.moveWatchCancel = cancel
+	a.moveWatchMu.Unlock()
+	go func() {
+		defer cancel()
+		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
+			"ws://127.0.0.1:8000/ws/move-library", nil)
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "move-library",
+				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			return
+		}
+		defer conn.Close()
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			runtime.EventsEmit(a.ctx, "move-library", string(raw))
+			var msg map[string]interface{}
+			if json.Unmarshal(raw, &msg) == nil {
+				if t, _ := msg["type"].(string); t == "status" {
+					s, _ := msg["status"].(string)
+					if s == "completed" || s == "failed" {
+						return
+					}
+				}
+			}
+		}
+	}()
+}
+
+// StopWatchMoveLibrary cancels the goroutine watching the move-library operation.
+func (a *App) StopWatchMoveLibrary() {
+	a.moveWatchMu.Lock()
+	defer a.moveWatchMu.Unlock()
+	if a.moveWatchCancel != nil {
+		a.moveWatchCancel()
+		a.moveWatchCancel = nil
+	}
+}
+
+// GetVersion returns the version string embedded at build time.
+func (a *App) GetVersion() string {
+	return Version
+}
+
+// CheckForUpdate queries GitHub for the latest release and returns update info.
+// Returns UpdateInfo{Available: false} when already up to date, in "dev" mode, or on error.
+func (a *App) CheckForUpdate() UpdateInfo {
+	rel, err := fetchLatestRelease()
+	if err != nil || rel.TagName == "" {
+		return UpdateInfo{}
+	}
+	if Version == "dev" || compareVersions(rel.TagName, Version) <= 0 {
+		return UpdateInfo{}
+	}
+	return UpdateInfo{
+		Available: true,
+		Version:   rel.TagName,
+		Notes:     rel.Body,
+	}
+}
+
+// DownloadAndInstall downloads the platform-appropriate release asset and installs it.
+// Emits "update:progress" events with JSON payload {phase, percent, message}.
+// On success: relaunches the app (Linux) or launches the NSIS installer and quits (Windows).
+func (a *App) DownloadAndInstall(latestVersion string) {
+	go func() {
+		emit := func(phase string, percent int, message string) {
+			data, _ := json.Marshal(map[string]interface{}{
+				"phase": phase, "percent": percent, "message": message,
+			})
+			runtime.EventsEmit(a.ctx, "update:progress", string(data))
+		}
+
+		rel, err := fetchLatestRelease()
+		if err != nil {
+			emit("error", 0, "Failed to fetch release info: "+err.Error())
+			return
+		}
+
+		assetURL := findAssetURL(rel)
+		if assetURL == "" {
+			emit("error", 0, "No update asset found for this platform")
+			return
+		}
+
+		tmpPath, pathErr := updateTempPath()
+		if pathErr != nil {
+			emit("error", 0, "Cannot determine download path: "+pathErr.Error())
+			return
+		}
+
+		emit("download", 0, "Starting download…")
+		if err := downloadFile(assetURL, tmpPath, func(pct int) {
+			emit("download", pct, fmt.Sprintf("Downloading… %d%%", pct))
+		}); err != nil {
+			emit("error", 0, "Download failed: "+err.Error())
+			return
+		}
+
+		emit("installing", 100, "Installing update…")
+		if isWindowsOS() {
+			if err := installWindows(tmpPath); err != nil {
+				emit("error", 0, "Failed to launch installer: "+err.Error())
+				return
+			}
+			emit("done", 100, "Installer launched. The app will now close.")
+			runtime.Quit(a.ctx)
+		} else {
+			if err := installLinux(tmpPath); err != nil {
+				emit("error", 0, "Failed to install update: "+err.Error())
+				return
+			}
+			if err := restartLinux(); err != nil {
+				emit("error", 0, "Update installed but failed to restart: "+err.Error())
+				return
+			}
+			emit("done", 100, "Update installed. Restarting…")
+			stopBackend(a.backendCmd)
+			runtime.Quit(a.ctx)
+		}
+	}()
 }
 
 // SelectDirectory opens a native directory picker dialog.

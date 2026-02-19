@@ -62,7 +62,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "C:\Program Files (x86)\NSIS;$env:PATH"
-          wails build -clean -platform windows/amd64 -nsis
+          wails build -clean -platform windows/amd64 -nsis -ldflags "-X 'main.Version=${{ github.ref_name }}'"
 
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
@@ -83,7 +83,7 @@ jobs:
       # Build 1: webkit2gtk-4.0 (Ubuntu 22.04, Debian 12)
       - name: Build Linux (webkit2gtk-4.0)
         if: runner.os == 'Linux'
-        run: xvfb-run wails build -clean -platform linux/amd64
+        run: xvfb-run wails build -clean -platform linux/amd64 -ldflags "-X 'main.Version=${{ github.ref_name }}'"
 
       - name: Package AppImage (webkit2gtk-4.0)
         if: runner.os == 'Linux'
@@ -98,7 +98,7 @@ jobs:
       # Build 2: webkit2gtk-4.1 (Arch, Fedora 39+, Ubuntu 24.04+)
       - name: Build Linux (webkit2gtk-4.1)
         if: runner.os == 'Linux'
-        run: xvfb-run wails build -clean -tags webkit2_41 -platform linux/amd64
+        run: xvfb-run wails build -clean -tags webkit2_41 -platform linux/amd64 -ldflags "-X 'main.Version=${{ github.ref_name }}' -X 'main.LinuxAssetName=scdl-web-linux-amd64-webkit4.1.AppImage'"
 
       - name: Package AppImage (webkit2gtk-4.1)
         if: runner.os == 'Linux'
