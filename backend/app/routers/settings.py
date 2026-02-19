@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +8,8 @@ from app.config import settings as app_settings
 from app.database import get_db
 from app.models.global_settings import GlobalSetting
 from app.schemas.settings import SettingsRead, SettingsUpdate
+from app.services.library_mover import library_mover
+from app.services.sync_manager import sync_manager
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -45,3 +49,65 @@ async def update_settings(payload: SettingsUpdate, db: AsyncSession = Depends(ge
         default_name_format=settings.get("default_name_format"),
         music_root=settings.get("music_root") or app_settings.music_root,
     )
+
+
+@router.get("/move-check")
+async def move_check(
+    new_music_root: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Pre-flight check: how many files would be moved."""
+    if sync_manager.is_syncing:
+        raise HTTPException(409, "Cannot move library while a sync is running")
+    if library_mover.is_moving:
+        raise HTTPException(409, "A library move is already in progress")
+
+    row = await db.get(GlobalSetting, "music_root")
+    old_root = Path(row.value if row and row.value else app_settings.music_root)
+    new_root = Path(new_music_root)
+
+    if old_root.resolve() == new_root.resolve():
+        return {"needs_move": False, "source_count": 0, "total_files": 0, "total_size": 0}
+
+    return await library_mover.pre_check(old_root, new_root)
+
+
+@router.post("/move-library")
+async def move_library(
+    payload: SettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Start the library move as a background task."""
+    if sync_manager.is_syncing:
+        raise HTTPException(409, "Cannot move library while a sync is running")
+    if library_mover.is_moving:
+        raise HTTPException(409, "A library move is already in progress")
+
+    new_music_root = payload.music_root
+    if not new_music_root:
+        raise HTTPException(400, "music_root is required")
+
+    row = await db.get(GlobalSetting, "music_root")
+    old_root = Path(row.value if row and row.value else app_settings.music_root)
+    new_root = Path(new_music_root)
+
+    if old_root.resolve() == new_root.resolve():
+        raise HTTPException(400, "New path is the same as the current path")
+
+    archives_root = Path(app_settings.archives_root)
+    library_mover.start_move(old_root, new_root, archives_root)
+
+    return {"status": "started"}
+
+
+@router.get("/move-status")
+async def move_status():
+    """Poll endpoint for move status (fallback if WS not connected)."""
+    return {
+        "is_moving": library_mover.is_moving,
+        "status": library_mover.status,
+        "total_files": library_mover.total_files,
+        "moved_files": library_mover.moved_files,
+        "current_file": library_mover.current_file,
+        "error": library_mover.error,
+    }

@@ -1,5 +1,5 @@
-import { api } from "./client";
-import type { Source, SourceCreate, SourceUpdate } from "../types/source";
+import { api, BASE_URL } from "./client";
+import type { Source, SourceCreate, SourceUpdate, TrackFile } from "../types/source";
 
 export const sourcesApi = {
   list: () => api.get<Source[]>("/sources"),
@@ -10,4 +10,12 @@ export const sourcesApi = {
     api.delete(`/sources/${id}?delete_files=${deleteFiles}`),
   openFolder: (id: number) =>
     api.post<{ status: string; path: string }>(`/sources/${id}/open-folder`),
+  tracks: (id: number) => api.get<TrackFile[]>(`/sources/${id}/tracks`),
+  trackStreamUrl: (id: number, path: string) =>
+    `${BASE_URL}/sources/${id}/tracks/stream?path=${encodeURIComponent(path)}`,
+  deleteTrack: (id: number, path: string, trackId: string | null) => {
+    const params = new URLSearchParams({ path });
+    if (trackId) params.set("track_id", trackId);
+    return api.delete(`/sources/${id}/tracks?${params}`);
+  },
 };

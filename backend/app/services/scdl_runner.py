@@ -82,40 +82,48 @@ class ScdlRunner:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(filemap, indent=2))
 
-    # ── Pre-sync archive verification ────────────────────────────
+    # ── Pre-sync: regenerate archive files from disk ────────────
 
-    def verify_archive(self, source: Source) -> int:
-        """Check filemap entries against disk. Prune archive for missing files.
-        Returns the number of entries pruned."""
-        filemap = self._load_filemap(source.id)
-        if not filemap:
-            return 0
+    def prepare_sync_files(self, source_id: int) -> int:
+        """Regenerate archive and sync files from filemap.
 
-        missing_ids: set[str] = set()
+        Only includes entries for files that exist on disk.  This makes
+        the folder the source of truth: missing files are not archived,
+        so scdl will re-download them.
+
+        Returns count of pruned (missing) filemap entries.
+        """
+        filemap = self._load_filemap(source_id)
+
+        archive_lines: list[str] = []
+        sync_lines: list[str] = []
+        live_filemap: dict[str, str] = {}
+        pruned = 0
+
         for track_id, filepath in filemap.items():
-            if not Path(filepath).exists():
-                missing_ids.add(track_id)
+            if Path(filepath).exists():
+                archive_lines.append(f"soundcloud {track_id}")
+                sync_lines.append(f"soundcloud {track_id} {filepath}")
+                live_filemap[track_id] = filepath
+            else:
+                pruned += 1
 
-        if not missing_ids:
-            return 0
+        self.archives_root.mkdir(parents=True, exist_ok=True)
 
-        # Prune filemap
-        for tid in missing_ids:
-            filemap.pop(tid, None)
-        self._save_filemap(source.id, filemap)
+        # Write archive (yt-dlp format: "soundcloud {id}")
+        self._archive_path(source_id).write_text(
+            "\n".join(archive_lines) + "\n" if archive_lines else ""
+        )
+        # Write sync file (scdl format: "soundcloud {id} /path/to/file")
+        self._sync_file_path(source_id).write_text(
+            "\n".join(sync_lines) + "\n" if sync_lines else ""
+        )
 
-        # Prune archive file
-        archive_path = self._archive_path(source.id)
-        if archive_path.exists():
-            original_lines = archive_path.read_text().strip().splitlines()
-            remaining = [
-                line for line in original_lines
-                if not any(line.strip() == f"soundcloud {tid}" for tid in missing_ids)
-            ]
-            archive_path.write_text("\n".join(remaining) + "\n" if remaining else "")
+        if pruned > 0:
+            self._save_filemap(source_id, live_filemap)
+            logger.info("Pruned %d missing entries from source %d", pruned, source_id)
 
-        logger.info("Pruned %d missing entries from source %d archive", len(missing_ids), source.id)
-        return len(missing_ids)
+        return pruned
 
     # ── Cleanup / Reset ──────────────────────────────────────────
 
@@ -131,9 +139,10 @@ class ScdlRunner:
                 logger.info("Deleted %s", path)
 
     def reset_archive(self, source_id: int) -> None:
-        """Wipe archive and filemap to force full re-download on next sync."""
+        """Wipe archive, sync, and filemap to force full re-download on next sync."""
         for path in [
             self._archive_path(source_id),
+            self._sync_file_path(source_id),
             self._filemap_path(source_id),
         ]:
             if path.exists():
@@ -179,6 +188,7 @@ class ScdlRunner:
         if auth_token:
             cmd.extend(["--auth-token", auth_token])
 
+        cmd.append("--no-playlist-folder")
         cmd.append("-c")
         return cmd
 

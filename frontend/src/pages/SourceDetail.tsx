@@ -1,8 +1,10 @@
-import { Title, Button, Group, Stack, Card, Alert, Divider, Modal, Text, Progress } from "@mantine/core";
-import { IconPlayerPlay, IconArrowLeft, IconRefresh, IconFolder } from "@tabler/icons-react";
+import { Title, Button, Group, Stack, Card, Alert, Box, Collapse, Modal, Text, Progress } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { IconPlayerPlay, IconArrowLeft, IconRefresh, IconFolder, IconChevronDown } from "@tabler/icons-react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSource, useUpdateSource, useResetArchive, useOpenFolder } from "../hooks/useSources";
+import { useSource, useUpdateSource, useResetArchive, useOpenFolder, useTracks, useDeleteTrack } from "../hooks/useSources";
 import { SourceForm } from "../components/SourceForm";
+import { TrackList } from "../components/TrackList";
 import { SyncLogViewer } from "../components/SyncLogViewer";
 import { useSyncWebSocket } from "../hooks/useSyncWebSocket";
 import { syncApi } from "../api/sync";
@@ -15,14 +17,17 @@ export function SourceDetail() {
   const sourceId = Number(id);
   const navigate = useNavigate();
   const { data: source, isLoading } = useSource(sourceId);
+  const { data: tracks } = useTracks(sourceId);
   const updateSource = useUpdateSource();
   const resetArchive = useResetArchive();
   const openFolder = useOpenFolder();
+  const deleteTrack = useDeleteTrack();
   const qc = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
   const [checkedInitial, setCheckedInitial] = useState(false);
   const [resetConfirmOpened, setResetConfirmOpened] = useState(false);
+  const [settingsOpened, { toggle: toggleSettings }] = useDisclosure(false);
 
   // On mount, check if this source is already syncing
   useEffect(() => {
@@ -51,8 +56,9 @@ export function SourceDetail() {
   useEffect(() => {
     if (status === "completed" || status === "failed" || status === "cancelled") {
       qc.invalidateQueries({ queryKey: ["sources"] });
+      qc.invalidateQueries({ queryKey: ["sources", sourceId, "tracks"] });
     }
-  }, [status, qc]);
+  }, [status, qc, sourceId]);
 
   const handleSync = useCallback(() => {
     clear();
@@ -73,7 +79,7 @@ export function SourceDetail() {
   return (
     <Stack gap="lg">
       <Group>
-        <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/sources")}>
+        <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => navigate("/")}>
           Back
         </Button>
         <Title order={2}>{source.name}</Title>
@@ -87,16 +93,52 @@ export function SourceDetail() {
       </Group>
 
       <Card withBorder p="lg">
-        <Title order={4} mb="md">Settings</Title>
-        <SourceForm
-          initial={source}
-          onSubmit={handleUpdate}
-          loading={updateSource.isPending}
-          submitLabel="Update"
-        />
+        <Title order={4} mb="sm">
+          Tracks
+          {tracks && (() => {
+            const synced = tracks.filter(t => t.status === "synced").length;
+            const missing = tracks.filter(t => t.status === "missing").length;
+            const parts = [];
+            if (synced) parts.push(`${synced} synced`);
+            if (missing) parts.push(`${missing} missing`);
+            return parts.length ? ` (${parts.join(", ")})` : tracks.length ? ` (${tracks.length})` : "";
+          })()}
+        </Title>
+        {tracks && (
+          <TrackList
+            sourceId={sourceId}
+            tracks={tracks}
+            onDeleteTrack={(path, trackId) => deleteTrack.mutate({ sourceId, path, trackId })}
+          />
+        )}
       </Card>
 
-      <Divider />
+      <Card withBorder p="lg">
+        <Group
+          justify="space-between"
+          style={{ cursor: "pointer" }}
+          onClick={toggleSettings}
+        >
+          <Title order={4}>Settings</Title>
+          <IconChevronDown
+            size={18}
+            style={{
+              transform: settingsOpened ? "rotate(180deg)" : "none",
+              transition: "transform 200ms",
+            }}
+          />
+        </Group>
+        <Collapse in={settingsOpened}>
+          <Box mt="md">
+            <SourceForm
+              initial={source}
+              onSubmit={handleUpdate}
+              loading={updateSource.isPending}
+              submitLabel="Update"
+            />
+          </Box>
+        </Collapse>
+      </Card>
 
       <Card withBorder p="lg">
         <Group justify="space-between" mb="md">

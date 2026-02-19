@@ -43,6 +43,7 @@ jobs:
           sudo apt-get install -y \
             libgtk-3-dev \
             libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             libfuse2
 
@@ -70,11 +71,7 @@ jobs:
           name: scdl-web-windows-amd64-installer
           path: build/bin/*-installer.exe
 
-      # ── Linux: AppImage ──────────────────────────────────────────────────
-      - name: Build Linux
-        if: runner.os == 'Linux'
-        run: xvfb-run wails build -clean -platform linux/amd64
-
+      # ── Linux: AppImage (both WebKit variants) ─────────────────────────
       - name: Download appimagetool
         if: runner.os == 'Linux'
         run: |
@@ -83,7 +80,12 @@ jobs:
             -O /usr/local/bin/appimagetool
           chmod +x /usr/local/bin/appimagetool
 
-      - name: Build Linux AppImage
+      # Build 1: webkit2gtk-4.0 (Ubuntu 22.04, Debian 12)
+      - name: Build Linux (webkit2gtk-4.0)
+        if: runner.os == 'Linux'
+        run: xvfb-run wails build -clean -platform linux/amd64
+
+      - name: Package AppImage (webkit2gtk-4.0)
         if: runner.os == 'Linux'
         run: |
           mkdir -p AppDir/usr/bin
@@ -93,12 +95,35 @@ jobs:
           sed -i 's|Exec=.*|Exec=scdl-web|' AppDir/scdl-web.desktop
           ARCH=x86_64 appimagetool AppDir build/bin/scdl-web-linux-amd64.AppImage
 
-      - name: Upload Linux artifact
+      # Build 2: webkit2gtk-4.1 (Arch, Fedora 39+, Ubuntu 24.04+)
+      - name: Build Linux (webkit2gtk-4.1)
+        if: runner.os == 'Linux'
+        run: xvfb-run wails build -clean -tags webkit2_41 -platform linux/amd64
+
+      - name: Package AppImage (webkit2gtk-4.1)
+        if: runner.os == 'Linux'
+        run: |
+          rm -rf AppDir
+          mkdir -p AppDir/usr/bin
+          cp build/bin/scdl-web AppDir/usr/bin/scdl-web
+          cp build/appicon.png AppDir/scdl-web.png
+          cp build/linux/scdl-web.desktop AppDir/scdl-web.desktop
+          sed -i 's|Exec=.*|Exec=scdl-web|' AppDir/scdl-web.desktop
+          ARCH=x86_64 appimagetool AppDir build/bin/scdl-web-linux-amd64-webkit4.1.AppImage
+
+      - name: Upload Linux artifact (webkit2gtk-4.0)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: scdl-web-linux-amd64-appimage
           path: build/bin/scdl-web-linux-amd64.AppImage
+
+      - name: Upload Linux artifact (webkit2gtk-4.1)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scdl-web-linux-amd64-webkit41-appimage
+          path: build/bin/scdl-web-linux-amd64-webkit4.1.AppImage
 
   release:
     needs: build

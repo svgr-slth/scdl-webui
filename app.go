@@ -49,6 +49,10 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 
+	// Ensure .env and data directories exist (idempotent, safe on every startup).
+	createEnvFile()
+	createDataDirs()
+
 	// Check Python and FFmpeg
 	if !checkPython() {
 		runtime.MessageDialog(ctx, runtime.MessageDialogOptions{

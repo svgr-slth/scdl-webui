@@ -78,7 +78,7 @@ export function SourceForm({ initial, onSubmit, loading, submitLabel = "Create" 
     if (detected === "playlist") {
       setSourceType("playlist");
       if (!nameTouched.current && slug) setName(slug.replace(/-/g, " "));
-      if (!folderTouched.current && user) setLocalFolder(`${user}/${slug || "playlist"}`);
+      if (!folderTouched.current && user && slug) setLocalFolder(`${user}/${slug}`);
     } else if (detected === "profile") {
       // Switch away from playlist if currently selected
       if (sourceType === "playlist") setSourceType("artist_tracks");
@@ -144,7 +144,7 @@ export function SourceForm({ initial, onSubmit, loading, submitLabel = "Create" 
           required
           value={localFolder}
           onChange={(e) => { folderTouched.current = true; setLocalFolder(e.currentTarget.value); }}
-          placeholder="techno/my-playlist"
+          placeholder="artist-name/playlist-name"
           description="Relative path under the music directory"
         />
         <Select label="Audio Format" data={audioFormats} value={audioFormat} onChange={(v) => setAudioFormat(v || "mp3")} />

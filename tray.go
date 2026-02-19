@@ -46,6 +46,7 @@ func (t *Tray) teardown() {}
 // showWindow brings the Wails window to the foreground.
 func (a *App) showWindow() {
 	if a.ctx != nil {
+		runtime.WindowUnminimise(a.ctx)
 		runtime.WindowShow(a.ctx)
 	}
 }
