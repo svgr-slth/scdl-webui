@@ -190,6 +190,7 @@ class SyncManager:
                 # Count processed tracks (downloaded, skipped, or removed)
                 if ("Destination:" in line
                     or "has already been recorded in the archive" in line
+                    or "has already been downloaded" in line
                     or "Removing" in line):
                     processed_items += 1
 

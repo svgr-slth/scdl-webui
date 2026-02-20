@@ -236,13 +236,20 @@ class ScdlRunner:
             if m and current_track_id:
                 filemap[current_track_id] = m.group(1)
 
+            # Also capture "already downloaded" files (exist on disk but not in archive)
+            if "has already been downloaded" in line and current_track_id:
+                m = re.match(r"\[download\]\s+(.+?)\s+has already been downloaded", line)
+                if m:
+                    filemap[current_track_id] = m.group(1)
+
         return_code = await process.wait()
 
         # Persist updated filemap
         self._save_filemap(source.id, filemap)
 
         added = sum(1 for l in lines if "Destination:" in l)
-        skipped = sum(1 for l in lines if "has already been recorded in the archive" in l)
+        skipped = sum(1 for l in lines if "has already been recorded in the archive" in l
+                      or "has already been downloaded" in l)
         removed = sum(1 for l in lines if "Removing" in l)
 
         return SyncResult(
