@@ -1,9 +1,10 @@
-import { Title, Button, Group, Stack, Card, Alert, Box, Collapse, Modal, Text, Progress } from "@mantine/core";
+import { Title, Button, Group, Stack, Card, Alert, Box, Collapse, Modal, Text, Progress, Badge } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlayerPlay, IconArrowLeft, IconRefresh, IconFolder, IconChevronDown } from "@tabler/icons-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSource, useUpdateSource, useResetArchive, useOpenFolder, useTracks, useDeleteTrack } from "../hooks/useSources";
 import { SourceForm } from "../components/SourceForm";
+import { RekordboxActions } from "../components/RekordboxActions";
 import { TrackList } from "../components/TrackList";
 import { SyncLogViewer } from "../components/SyncLogViewer";
 import { useSyncWebSocket } from "../hooks/useSyncWebSocket";
@@ -29,7 +30,7 @@ export function SourceDetail() {
   const [resetConfirmOpened, setResetConfirmOpened] = useState(false);
   const [settingsOpened, { toggle: toggleSettings }] = useDisclosure(false);
 
-  // On mount, check if this source is already syncing
+  // On mount, check if this source is already syncing/queued
   useEffect(() => {
     syncApi.sourceStatus(sourceId).then((res) => {
       if (res.is_syncing) {
@@ -74,7 +75,8 @@ export function SourceDetail() {
   if (isLoading || !checkedInitial) return <Title order={3}>Loading...</Title>;
   if (!source) return <Alert color="red">Source not found</Alert>;
 
-  const syncActive = status === "running" || pendingSync;
+  const isQueued = status === "queued";
+  const syncActive = status === "running" || status === "queued" || pendingSync;
 
   return (
     <Stack gap="lg">
@@ -90,6 +92,7 @@ export function SourceDetail() {
         >
           Open Folder
         </Button>
+        <RekordboxActions sourceId={sourceId} variant="buttons" disabled={syncActive} />
       </Group>
 
       <Card withBorder p="lg">
@@ -142,7 +145,12 @@ export function SourceDetail() {
 
       <Card withBorder p="lg">
         <Group justify="space-between" mb="md">
-          <Title order={4}>Sync</Title>
+          <Group gap="xs">
+            <Title order={4}>Sync</Title>
+            {isQueued && (
+              <Badge color="grape" size="sm">queued</Badge>
+            )}
+          </Group>
           <Group gap="xs">
             <Button
               variant="light"
@@ -164,7 +172,13 @@ export function SourceDetail() {
         </Group>
         {isSyncing && (
           <>
-            {progress && progress.total > 0 && (
+            {isQueued && (
+              <Stack gap={4} mb="sm">
+                <Text size="sm" c="dimmed">Waiting in queue...</Text>
+                <Progress value={100} size="lg" radius="md" animated striped color="grape" />
+              </Stack>
+            )}
+            {!isQueued && progress && progress.total > 0 && (
               <Stack gap={4} mb="sm">
                 <Group justify="space-between">
                   <Text size="sm" c="dimmed">

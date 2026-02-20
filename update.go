@@ -150,55 +150,108 @@ func isWindowsOS() bool {
 	return goruntime.GOOS == "windows"
 }
 
+// appImagePath returns the path to the actual .AppImage file on Linux.
+// Inside an AppImage, os.Executable() returns the FUSE-mounted binary path
+// (e.g. /tmp/.mount_XXX/usr/bin/scdl-web), not the .AppImage file itself.
+// The AppImage runtime sets $APPIMAGE to the real path.
+func appImagePath() (string, error) {
+	if p := os.Getenv("APPIMAGE"); p != "" {
+		return p, nil
+	}
+	// Fallback for non-AppImage Linux builds
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(exe)
+}
+
 // updateTempPath returns a suitable path to download the update file to.
-// On Windows this is the OS temp dir; on Linux it is the same directory as
-// the running AppImage so that os.Rename() is atomic (same filesystem).
+// Always uses the OS temp dir so the download succeeds regardless of
+// the target directory's permissions.
 func updateTempPath() (string, error) {
 	if goruntime.GOOS == "windows" {
 		return filepath.Join(os.TempDir(), "scdl-web-update-installer.exe"), nil
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(filepath.Dir(exe), ".scdl-web.update"), nil
+	return filepath.Join(os.TempDir(), "scdl-web.update.AppImage"), nil
 }
 
-// installWindows launches the NSIS installer silently (/S) and returns immediately.
+// installWindows launches the NSIS installer with explicit UAC elevation.
+// Uses PowerShell Start-Process -Verb RunAs to reliably trigger the UAC prompt.
+// If the user cancels UAC, an error is returned.
 // The caller should quit the app after calling this.
 func installWindows(installerPath string) error {
-	cmd := exec.Command(installerPath, "/S")
-	return cmd.Start()
+	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-Command",
+		fmt.Sprintf(`Start-Process -FilePath '%s' -ArgumentList '/S' -Verb RunAs`,
+			installerPath))
+	return cmd.Run()
 }
 
-// installLinux atomically replaces the running AppImage with the downloaded file.
-func installLinux(downloadedPath string) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("cannot determine executable path: %w", err)
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return fmt.Errorf("cannot resolve symlink: %w", err)
-	}
-	if err := os.Rename(downloadedPath, exe); err != nil {
-		return fmt.Errorf("cannot replace AppImage (permission error?): %w", err)
-	}
-	return os.Chmod(exe, 0755)
-}
-
-// restartLinux spawns a new instance of the (now-updated) executable and returns.
-// The caller should stop the backend and quit the Wails app after calling this.
-func restartLinux() error {
-	exe, err := os.Executable()
+// copyAndReplace copies src to dst atomically via a temp file + rename.
+// Returns an error if the target directory is not writable.
+func copyAndReplace(src, dst string) error {
+	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	exe, err = filepath.EvalSymlinks(exe)
+	defer in.Close()
+
+	tmp := dst + ".tmp"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+
+	return os.Rename(tmp, dst)
+}
+
+// installLinux replaces the running AppImage with the downloaded update.
+// Attempts three strategies in order:
+//  1. Atomic rename (fast, works if same filesystem + user has write perms)
+//  2. File copy without elevation (works across filesystems if user has write perms)
+//  3. Elevated copy via pkexec (Polkit graphical password prompt)
+func installLinux(downloadedPath string) error {
+	target, err := appImagePath()
+	if err != nil {
+		return fmt.Errorf("cannot determine AppImage path: %w", err)
+	}
+
+	// Try 1: atomic rename (same filesystem + write perms)
+	if err := os.Rename(downloadedPath, target); err == nil {
+		return os.Chmod(target, 0755)
+	}
+
+	// Try 2: copy without elevation (different filesystem, user has write perms)
+	if err := copyAndReplace(downloadedPath, target); err == nil {
+		os.Remove(downloadedPath)
+		return os.Chmod(target, 0755)
+	}
+
+	// Try 3: elevated copy via pkexec (polkit graphical password prompt)
+	cmd := exec.Command("pkexec", "sh", "-c",
+		fmt.Sprintf("cp '%s' '%s' && chmod 755 '%s'",
+			downloadedPath, target, target))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to install update (elevated privileges required): %w", err)
+	}
+	os.Remove(downloadedPath)
+	return nil
+}
+
+// restartLinux spawns a new instance of the (now-updated) AppImage and returns.
+// The caller should stop the backend and quit the Wails app after calling this.
+func restartLinux() error {
+	exe, err := appImagePath()
 	if err != nil {
 		return err
 	}

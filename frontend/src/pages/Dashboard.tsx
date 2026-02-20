@@ -5,9 +5,9 @@ import { useSettings } from "../hooks/useSettings";
 import { syncApi } from "../api/sync";
 import { SourceCard } from "../components/SourceCard";
 import { SourceForm } from "../components/SourceForm";
-import { useSyncWebSocket } from "../hooks/useSyncWebSocket";
+import { useMultiSyncWebSocket } from "../hooks/useMultiSyncWebSocket";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { SourceCreate } from "../types/source";
 
 export function Dashboard() {
@@ -17,19 +17,20 @@ export function Dashboard() {
   const deleteSource = useDeleteSource();
   const qc = useQueryClient();
   const [syncing, setSyncing] = useState(false);
-  const [activeSourceId, setActiveSourceId] = useState<number | null>(null);
+  const [syncSources, setSyncSources] = useState<Record<number, "running" | "queued">>({});
   const [addOpened, setAddOpened] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
   const [deleteFiles, setDeleteFiles] = useState(false);
+  const prevHadSyncing = useRef(false);
 
-  // Poll sync status to detect which source is currently syncing
+  // Poll sync status to detect which sources are syncing/queued
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       try {
         const status = await syncApi.status();
         if (!cancelled) {
-          setActiveSourceId(status.is_syncing ? status.active_source_id : null);
+          setSyncSources(status.sources);
         }
       } catch {
         // ignore
@@ -40,20 +41,28 @@ export function Dashboard() {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Connect WebSocket to the active source for real-time progress
-  const { progress, status: wsStatus } = useSyncWebSocket(activeSourceId);
+  // Connect WebSocket to all running sources for real-time progress
+  const runningSourceIds = useMemo(
+    () => Object.entries(syncSources)
+      .filter(([, status]) => status === "running")
+      .map(([id]) => Number(id)),
+    [syncSources],
+  );
+  const { states: wsStates } = useMultiSyncWebSocket(runningSourceIds);
 
-  // Refresh sources list when a sync finishes
+  // Refresh sources list when syncing ends
   useEffect(() => {
-    if (wsStatus === "completed" || wsStatus === "failed" || wsStatus === "cancelled") {
+    const hasSyncing = Object.keys(syncSources).length > 0;
+    if (prevHadSyncing.current && !hasSyncing) {
       qc.invalidateQueries({ queryKey: ["sources"] });
-      setActiveSourceId(null);
     }
-  }, [wsStatus, qc]);
+    prevHadSyncing.current = hasSyncing;
+  }, [syncSources, qc]);
 
   const handleSync = useCallback(async (sourceId: number) => {
     await syncApi.trigger(sourceId);
-    setActiveSourceId(sourceId);
+    // Immediately reflect in UI before next poll
+    setSyncSources((prev) => ({ ...prev, [sourceId]: "running" }));
     qc.invalidateQueries({ queryKey: ["sources"] });
   }, [qc]);
 
@@ -103,16 +112,20 @@ export function Dashboard() {
         <Alert>No sources configured. Click "Add Source" to get started.</Alert>
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-          {sources?.map((s) => (
-            <SourceCard
-              key={s.id}
-              source={s}
-              onSync={handleSync}
-              onDelete={handleDelete}
-              progress={s.id === activeSourceId ? progress : null}
-              isSyncing={s.id === activeSourceId}
-            />
-          ))}
+          {sources?.map((s) => {
+            const syncStatus = syncSources[s.id] ?? null;
+            const wsState = wsStates[s.id];
+            return (
+              <SourceCard
+                key={s.id}
+                source={s}
+                onSync={handleSync}
+                onDelete={handleDelete}
+                progress={wsState?.progress ?? null}
+                syncStatus={syncStatus}
+              />
+            );
+          })}
         </SimpleGrid>
       )}
 

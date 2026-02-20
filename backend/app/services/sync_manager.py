@@ -16,7 +16,10 @@ from app.config import settings
 class SyncManager:
     def __init__(self):
         self.active_tasks: dict[int, asyncio.Task] = {}
+        self.queued_sources: list[int] = []
         self.log_buffers: dict[int, list[str]] = {}
+        self._max_concurrent = 2
+        self._semaphore = asyncio.Semaphore(self._max_concurrent)
         self._runner = ScdlRunner(settings.music_root, settings.archives_root)
         self._ws_manager = None
 
@@ -36,15 +39,36 @@ class SyncManager:
     def is_source_syncing(self, source_id: int) -> bool:
         return source_id in self.active_tasks
 
+    def get_source_status(self, source_id: int) -> str | None:
+        """Return 'running', 'queued', or None."""
+        if source_id not in self.active_tasks:
+            return None
+        return "queued" if source_id in self.queued_sources else "running"
+
     @property
     def is_syncing(self) -> bool:
         return len(self.active_tasks) > 0
 
-    @property
-    def active_source_id(self) -> int | None:
-        if self.active_tasks:
-            return next(iter(self.active_tasks.keys()))
-        return None
+    def get_all_status(self) -> dict[int, str]:
+        """Returns {source_id: 'running' | 'queued'} for all active/queued sources."""
+        result = {}
+        for sid in self.active_tasks:
+            result[sid] = "queued" if sid in self.queued_sources else "running"
+        return result
+
+    async def load_max_concurrent(self) -> None:
+        """Load max_concurrent_syncs from DB on startup."""
+        async with async_session() as db:
+            row = await db.get(GlobalSetting, "max_concurrent_syncs")
+            if row and row.value:
+                n = int(row.value)
+                self._max_concurrent = n
+                self._semaphore = asyncio.Semaphore(n)
+
+    def update_max_concurrent(self, n: int) -> None:
+        """Update the concurrency limit. Takes effect for new syncs."""
+        self._max_concurrent = n
+        self._semaphore = asyncio.Semaphore(n)
 
     async def start_sync(self, source_id: int) -> str:
         from app.services.library_mover import library_mover
@@ -71,8 +95,6 @@ class SyncManager:
                     task = asyncio.create_task(self._run_sync(source.id))
                     self.active_tasks[source.id] = task
                     count += 1
-                    # Wait for each to finish before starting next (sequential)
-                    await task
         return count
 
     async def cancel_sync(self, source_id: int) -> bool:
@@ -83,6 +105,34 @@ class SyncManager:
         return False
 
     async def _run_sync(self, source_id: int):
+        # Mark as queued while waiting for semaphore
+        self.queued_sources.append(source_id)
+        if self._ws_manager:
+            await self._ws_manager.broadcast(source_id, {
+                "type": "status",
+                "status": "queued",
+            })
+
+        try:
+            async with self._semaphore:
+                # Transition from queued to running
+                if source_id in self.queued_sources:
+                    self.queued_sources.remove(source_id)
+
+                await self._do_sync(source_id)
+        except asyncio.CancelledError:
+            # Handle cancellation while queued (before semaphore acquired)
+            if source_id in self.queued_sources:
+                self.queued_sources.remove(source_id)
+            self.active_tasks.pop(source_id, None)
+            self.log_buffers.pop(source_id, None)
+            if self._ws_manager:
+                await self._ws_manager.broadcast(source_id, {
+                    "type": "status",
+                    "status": "cancelled",
+                })
+
+    async def _do_sync(self, source_id: int):
         async with async_session() as db:
             source = await db.get(Source, source_id)
             if not source:

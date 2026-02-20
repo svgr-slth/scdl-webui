@@ -17,22 +17,17 @@ async def trigger_sync_all():
 
 
 @router.get("/status", response_model=SyncStatus)
-async def get_sync_status(db: AsyncSession = Depends(get_db)):
-    source_name = None
-    if sync_manager.active_source_id:
-        source = await db.get(Source, sync_manager.active_source_id)
-        if source:
-            source_name = source.name
+async def get_sync_status():
     return SyncStatus(
         is_syncing=sync_manager.is_syncing,
-        active_source_id=sync_manager.active_source_id,
-        active_source_name=source_name,
+        sources=sync_manager.get_all_status(),
     )
 
 
 @router.get("/{source_id}/status")
 async def get_source_sync_status(source_id: int):
-    return {"is_syncing": sync_manager.is_source_syncing(source_id)}
+    status = sync_manager.get_source_status(source_id)
+    return {"is_syncing": status is not None, "status": status}
 
 
 @router.post("/{source_id}")
