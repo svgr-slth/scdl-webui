@@ -70,6 +70,7 @@ func createVenv() error {
 
 	log.Println("Creating Python virtual environment...")
 	cmd := exec.Command(py, "-m", "venv", venv)
+	hideWindow(cmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -80,6 +81,17 @@ func createVenv() error {
 	return nil
 }
 
+// checkDeps verifies that all required Python packages are importable in the venv.
+func checkDeps() bool {
+	py := venvBin("python")
+	cmd := exec.Command(py, "-c",
+		"import fastapi; import uvicorn; import sqlalchemy; import aiosqlite; import alembic; import pydantic; import pydantic_settings; import scdl")
+	hideWindow(cmd)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run() == nil
+}
+
 func pipInstall() error {
 	log.Println("Installing Python dependencies...")
 
@@ -87,6 +99,7 @@ func pipInstall() error {
 	reqFile := filepath.Join(backendDir(), "requirements.txt")
 
 	cmd := exec.Command(pip, "install", "-r", reqFile)
+	hideWindow(cmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -125,6 +138,7 @@ func startBackend(envVars []string) (*exec.Cmd, error) {
 		"--host", "127.0.0.1",
 		"--port", "8000",
 	)
+	hideWindow(cmd)
 	cmd.Dir = backendDir()
 	cmd.Env = env
 	cmd.Stdout = os.Stdout

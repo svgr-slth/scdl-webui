@@ -53,9 +53,11 @@ jobs:
       # ── Windows: NSIS installer ──────────────────────────────────────────
       - name: Install NSIS (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install nsis --no-progress -y
-          echo "C:/Program Files (x86)/NSIS" >> $GITHUB_PATH
+          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+          echo "C:/Program Files (x86)/NSIS" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Build Windows + NSIS installer
         if: runner.os == 'Windows'

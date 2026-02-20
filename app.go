@@ -59,6 +59,27 @@ func (a *App) startup(ctx context.Context) {
 	createEnvFile()
 	createDataDirs()
 
+	// Verify Python dependencies are installed (handles partial pip failures)
+	if !checkDeps() {
+		log.Println("Dependencies missing, running pip install...")
+		if err := pipInstall(); err != nil {
+			runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Dependency Error",
+				Message: fmt.Sprintf("Failed to install Python dependencies:\n\n%v", err),
+			})
+			return
+		}
+		if !checkDeps() {
+			runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Dependency Error",
+				Message: "Python dependencies could not be installed.\nPlease check your internet connection and try again.",
+			})
+			return
+		}
+	}
+
 	// Check Python and FFmpeg
 	if !checkPython() {
 		runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
