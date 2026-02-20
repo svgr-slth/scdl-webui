@@ -16,7 +16,8 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 SETTING_KEYS = [
     "auth_token", "default_audio_format", "default_name_format", "music_root",
-    "auto_sync_enabled", "auto_sync_interval_minutes",
+    "auto_sync_enabled", "auto_sync_interval_minutes", "max_concurrent_syncs",
+    "rekordbox_xml_path",
 ]
 
 
@@ -36,6 +37,10 @@ def _build_settings_read(settings: dict[str, str | None]) -> SettingsRead:
         auto_sync_interval_minutes=int(settings["auto_sync_interval_minutes"])
         if settings.get("auto_sync_interval_minutes")
         else 60,
+        max_concurrent_syncs=int(settings["max_concurrent_syncs"])
+        if settings.get("max_concurrent_syncs")
+        else 2,
+        rekordbox_xml_path=settings.get("rekordbox_xml_path"),
     )
 
 
@@ -72,6 +77,10 @@ async def update_settings(payload: SettingsUpdate, db: AsyncSession = Depends(ge
             result.auto_sync_enabled,
             result.auto_sync_interval_minutes,
         )
+
+    # Update sync concurrency limit if changed
+    if "max_concurrent_syncs" in updated_keys:
+        sync_manager.update_max_concurrent(result.max_concurrent_syncs)
 
     return result
 

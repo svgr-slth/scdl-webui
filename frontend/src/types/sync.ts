@@ -17,8 +17,7 @@ export interface SyncRunDetail extends SyncRun {
 
 export interface SyncStatus {
   is_syncing: boolean;
-  active_source_id: number | null;
-  active_source_name: string | null;
+  sources: Record<number, "running" | "queued">;
 }
 
 export interface WsMessage {

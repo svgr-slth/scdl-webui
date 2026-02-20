@@ -3,6 +3,7 @@ import { IconPlayerPlay, IconFolder, IconTrash } from "@tabler/icons-react";
 import type { Source } from "../types/source";
 import { useNavigate } from "react-router-dom";
 import { useOpenFolder } from "../hooks/useSources";
+import { RekordboxActions } from "./RekordboxActions";
 
 const typeLabels: Record<string, string> = {
   playlist: "Playlist",
@@ -17,6 +18,7 @@ const statusColors: Record<string, string> = {
   running: "blue",
   failed: "red",
   cancelled: "yellow",
+  queued: "grape",
 };
 
 interface Props {
@@ -24,13 +26,16 @@ interface Props {
   onSync: (id: number) => void;
   onDelete: (id: number, name: string) => void;
   progress?: { current: number; total: number } | null;
-  isSyncing?: boolean;
+  syncStatus?: "running" | "queued" | null;
 }
 
-export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Props) {
+export function SourceCard({ source, onSync, onDelete, progress, syncStatus }: Props) {
   const navigate = useNavigate();
   const openFolder = useOpenFolder();
-  const hasProgress = progress && progress.total > 0;
+  const isActive = syncStatus === "running" || syncStatus === "queued";
+  const isRunning = syncStatus === "running";
+  const isQueued = syncStatus === "queued";
+  const hasProgress = isRunning && progress && progress.total > 0;
   const pct = hasProgress ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
@@ -47,11 +52,15 @@ export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Pr
         <Text size="xs" c="dimmed">Folder: {source.local_folder}</Text>
         <Text size="xs" c="dimmed">Format: {source.audio_format.toUpperCase()}</Text>
 
-        {isSyncing && (
+        {isActive && (
           <Stack gap={4}>
             <Group justify="space-between">
               <Text size="xs" c="dimmed">
-                {hasProgress ? `${progress.current} / ${progress.total} tracks` : "Syncing..."}
+                {isQueued
+                  ? "Waiting in queue..."
+                  : hasProgress
+                    ? `${progress.current} / ${progress.total} tracks`
+                    : "Syncing..."}
               </Text>
               {hasProgress && (
                 <Text size="xs" c="dimmed">{pct}%</Text>
@@ -62,21 +71,24 @@ export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Pr
               size="sm"
               radius="md"
               animated
-              striped={!hasProgress}
+              striped={isQueued || !hasProgress}
+              color={isQueued ? "grape" : undefined}
             />
           </Stack>
         )}
 
         <Group justify="space-between" mt="xs">
           <Group gap="xs">
-            {isSyncing ? (
-              <Badge size="xs" color="blue">running</Badge>
+            {isActive ? (
+              <Badge size="xs" color={statusColors[syncStatus!]}>
+                {syncStatus}
+              </Badge>
             ) : source.last_sync_status ? (
               <Badge size="xs" color={statusColors[source.last_sync_status] || "gray"}>
                 {source.last_sync_status}
               </Badge>
             ) : null}
-            {!isSyncing && source.last_sync_at && (
+            {!isActive && source.last_sync_at && (
               <Text size="xs" c="dimmed">
                 {new Date(source.last_sync_at).toLocaleDateString()}
               </Text>
@@ -88,6 +100,7 @@ export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Pr
                 <IconFolder size={16} />
               </ActionIcon>
             </Tooltip>
+            <RekordboxActions sourceId={source.id} variant="menu" disabled={isActive} />
             <Tooltip label="Delete">
               <ActionIcon variant="subtle" color="red" onClick={() => onDelete(source.id, source.name)}>
                 <IconTrash size={16} />
@@ -100,7 +113,7 @@ export function SourceCard({ source, onSync, onDelete, progress, isSyncing }: Pr
               size="xs"
               leftSection={<IconPlayerPlay size={14} />}
               onClick={() => onSync(source.id)}
-              loading={isSyncing}
+              loading={isActive}
             >
               Sync
             </Button>

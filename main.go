@@ -2,6 +2,8 @@ package main
 
 import (
 	"embed"
+	"log"
+	"os"
 
 	"github.com/getlantern/systray"
 	"github.com/wailsapp/wails/v2"
@@ -14,6 +16,15 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+
+	// Single-instance guard: detect and signal an already-running instance.
+	ln, shouldExit := tryBecomeFirstInstance()
+	if shouldExit {
+		log.Println("Another instance is running. Exiting.")
+		os.Exit(0)
+	}
+	app.instanceListener = ln
+
 	tray := NewTray(app)
 
 	// Initialise the system tray without blocking the main thread.

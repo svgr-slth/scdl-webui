@@ -14,8 +14,9 @@ import {
   Switch,
   NumberInput,
 } from "@mantine/core";
-import { IconCheck, IconFolder, IconAlertTriangle } from "@tabler/icons-react";
+import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
+import { useRekordboxStatus } from "../hooks/useRekordbox";
 import { settingsApi, type MoveCheckResult } from "../api/settings";
 import { FolderPicker } from "../components/FolderPicker";
 import { SyncLogViewer } from "../components/SyncLogViewer";
@@ -32,15 +33,20 @@ function formatBytes(bytes: number) {
 export function SettingsPage() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
+  const { data: rekordboxStatus } = useRekordboxStatus();
   const [authToken, setAuthToken] = useState("");
   const [defaultFormat, setDefaultFormat] = useState("mp3");
   const [nameFormat, setNameFormat] = useState("");
   const [musicRoot, setMusicRoot] = useState("");
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [autoSyncInterval, setAutoSyncInterval] = useState<number>(60);
+  const [maxConcurrentSyncs, setMaxConcurrentSyncs] = useState<number>(2);
   const [saved, setSaved] = useState(false);
   const [autoSyncSaved, setAutoSyncSaved] = useState(false);
   const [folderPickerOpened, setFolderPickerOpened] = useState(false);
+  const [rekordboxXmlPath, setRekordboxXmlPath] = useState("");
+  const [rekordboxSaved, setRekordboxSaved] = useState(false);
+  const [rekordboxFolderPickerOpened, setRekordboxFolderPickerOpened] = useState(false);
 
   // Move library state
   const [moveConfirmOpened, setMoveConfirmOpened] = useState(false);
@@ -67,6 +73,8 @@ export function SettingsPage() {
       originalMusicRoot.current = settings.music_root || "";
       setAutoSyncEnabled(settings.auto_sync_enabled ?? false);
       setAutoSyncInterval(settings.auto_sync_interval_minutes ?? 60);
+      setMaxConcurrentSyncs(settings.max_concurrent_syncs ?? 2);
+      setRekordboxXmlPath(settings.rekordbox_xml_path || "");
     }
   }, [settings]);
 
@@ -251,11 +259,21 @@ export function SettingsPage() {
             step={5}
             disabled={!autoSyncEnabled}
           />
+          <NumberInput
+            label="Max concurrent syncs"
+            description="Maximum number of sources syncing simultaneously"
+            value={maxConcurrentSyncs}
+            onChange={(v) => setMaxConcurrentSyncs(typeof v === "number" ? v : 2)}
+            min={1}
+            max={10}
+            step={1}
+          />
           <Button
             onClick={async () => {
               await updateSettings.mutateAsync({
                 auto_sync_enabled: autoSyncEnabled,
                 auto_sync_interval_minutes: autoSyncInterval,
+                max_concurrent_syncs: maxConcurrentSyncs,
               });
               setAutoSyncSaved(true);
               setTimeout(() => setAutoSyncSaved(false), 3000);
@@ -271,6 +289,90 @@ export function SettingsPage() {
           )}
         </Stack>
       </Card>
+
+      {/* Rekordbox card (hidden on Linux — Rekordbox is Windows/macOS only) */}
+      {rekordboxStatus?.platform !== "linux" && <Card withBorder p="lg" maw={600} mt="md">
+        <Group mb="md" gap="xs">
+          <IconVinyl size={20} />
+          <Title order={4}>Rekordbox</Title>
+        </Group>
+        <Stack gap="sm">
+          <div>
+            <Group gap="xs" align="flex-end">
+              <TextInput
+                flex={1}
+                label="Rekordbox XML Path"
+                value={rekordboxXmlPath}
+                onChange={(e) => setRekordboxXmlPath(e.currentTarget.value)}
+                placeholder={rekordboxStatus?.xml_path ?? "rekordbox-export.xml"}
+                description="Path to the Rekordbox XML file for exporting tracks and playlists"
+              />
+              <Button
+                variant="light"
+                leftSection={<IconFolder size={16} />}
+                onClick={() => setRekordboxFolderPickerOpened(true)}
+              >
+                Browse
+              </Button>
+            </Group>
+          </div>
+          <FolderPicker
+            opened={rekordboxFolderPickerOpened}
+            onClose={() => setRekordboxFolderPickerOpened(false)}
+            onSelect={setRekordboxXmlPath}
+            initialPath={rekordboxXmlPath || "/"}
+          />
+          {rekordboxStatus?.detected_paths && rekordboxStatus.detected_paths.length > 0 && (
+            <Alert color="teal" variant="light">
+              <Text size="sm" fw={500} mb={4}>Rekordbox installation detected:</Text>
+              {rekordboxStatus.detected_paths.map((p) => (
+                <Text
+                  key={p}
+                  size="xs"
+                  style={{ cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => setRekordboxXmlPath(p)}
+                >
+                  {p}
+                </Text>
+              ))}
+            </Alert>
+          )}
+          {rekordboxStatus?.xml_exists && (
+            <>
+              <Group gap="xs">
+                <Text size="sm" fw={500}>Tracks in XML:</Text>
+                <Text size="sm">{rekordboxStatus.total_tracks}</Text>
+              </Group>
+              <Group gap="xs">
+                <Text size="sm" fw={500}>Playlists:</Text>
+                <Text size="sm">{rekordboxStatus.total_playlists}</Text>
+              </Group>
+            </>
+          )}
+          <Button
+            onClick={async () => {
+              await updateSettings.mutateAsync({
+                rekordbox_xml_path: rekordboxXmlPath || null,
+              });
+              setRekordboxSaved(true);
+              setTimeout(() => setRekordboxSaved(false), 3000);
+            }}
+            loading={updateSettings.isPending}
+          >
+            Save
+          </Button>
+          {rekordboxSaved && (
+            <Alert color="green" icon={<IconCheck size={16} />}>
+              Rekordbox settings saved
+            </Alert>
+          )}
+          <Alert color="blue" variant="light">
+            <Text size="sm">
+              In Rekordbox, go to <strong>Preferences &gt; Advanced &gt; Browse</strong> and select the XML file above to import your tracks and playlists.
+            </Text>
+          </Alert>
+        </Stack>
+      </Card>}
 
       {/* Move progress card */}
       {isMoving && (

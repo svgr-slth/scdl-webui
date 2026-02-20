@@ -5,6 +5,8 @@ export interface Settings {
   music_root: string | null;
   auto_sync_enabled: boolean;
   auto_sync_interval_minutes: number;
+  max_concurrent_syncs: number;
+  rekordbox_xml_path: string | null;
 }
 
 export type SettingsUpdate = Partial<Settings>;

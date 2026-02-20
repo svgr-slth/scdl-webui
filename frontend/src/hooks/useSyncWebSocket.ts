@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WsMessage } from "../types/sync";
-import { BASE_URL } from "../api/client";
+import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime";
+import { WatchSync, StopWatchSync } from "../wailsjs/go/main/App";
 
 interface LogLine {
   line: string;
@@ -57,49 +58,25 @@ export function useSyncWebSocket(sourceId: number | null) {
       }
     }
 
-    // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
-    // connections and EventsEmit from goroutines is unreliable.
-    // Use HTTP polling instead — the only channel that reliably works on Windows.
-    if (window.location.protocol === "wails:") {
-      let cursor = 0;
-      let active = true;
-      let timeoutId: ReturnType<typeof setTimeout>;
-      setConnected(true);
-
-      const poll = async () => {
-        if (!active) return;
-        try {
-          const res = await fetch(`${BASE_URL}/sync/${sourceId}/live?cursor=${cursor}`);
-          if (!res.ok) throw new Error("poll failed");
-          const data = await res.json();
-
-          // Only emit status when non-idle (avoid overwriting local state before sync starts)
-          if (data.status && data.status !== "idle") {
-            handleMessage(JSON.stringify({ type: "status", status: data.status, error: data.error ?? null }));
-          }
-          for (const line of (data.logs as string[])) {
-            handleMessage(JSON.stringify({ type: "log", line }));
-          }
-          if (data.progress) {
-            handleMessage(JSON.stringify({ type: "progress", ...data.progress }));
-          }
-          if (data.stats) {
-            handleMessage(JSON.stringify({ type: "stats", ...data.stats }));
-          }
-          cursor = data.cursor;
-
-          // Slow poll when idle/terminal so we can detect a new sync starting
-          const isTerminal = ["completed", "failed", "cancelled"].includes(data.status);
-          timeoutId = setTimeout(poll, isTerminal || data.status === "idle" ? 2000 : 300);
-        } catch {
-          if (active) timeoutId = setTimeout(poll, 1000);
-        }
-      };
-
-      poll();
+    // In Wails builds (all platforms), direct WebSocket connections from the
+    // WebView don't reach the Python backend. Use the Go-side bridge instead:
+    // WatchSync opens a WS connection server-side and relays via EventsEmit.
+    // Note: window.runtime is injected by Wails on all platforms; the old
+    // "wails:" protocol check only worked on Linux (Windows uses http://).
+    const isWails = typeof (window as any).runtime !== "undefined";
+    if (isWails) {
+      const eventName = `sync:${sourceId}`;
+      let cancelled = false;
+      // Register listener BEFORE the connection is ready so no messages are lost.
+      EventsOn(eventName, handleMessage);
+      // WatchSync blocks until Go's WS to the backend is established, then resolves.
+      WatchSync(sourceId).then(() => {
+        if (!cancelled) setConnected(true);
+      });
       return () => {
-        active = false;
-        clearTimeout(timeoutId);
+        cancelled = true;
+        EventsOff(eventName);
+        StopWatchSync(sourceId);
         setConnected(false);
       };
     }

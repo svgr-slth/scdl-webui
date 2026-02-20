@@ -24,5 +24,4 @@ class SyncRunDetail(SyncRunRead):
 
 class SyncStatus(BaseModel):
     is_syncing: bool
-    active_source_id: int | None = None
-    active_source_name: str | None = None
+    sources: dict[int, str] = {}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os/exec"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type App struct {
 	syncWatchCancels sync.Map
 	moveWatchCancel  context.CancelFunc
 	moveWatchMu      sync.Mutex
+	instanceListener net.Listener // TCP listener for single-instance IPC
 }
 
 // NewApp creates a new App instance.
@@ -31,6 +33,11 @@ func NewApp() *App {
 // startup is called when the app starts. It sets up the backend.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Start single-instance IPC listener now that we have the Wails context.
+	if a.instanceListener != nil {
+		a.startSingleInstanceListener(a.instanceListener)
+	}
 
 	// Always re-extract backend Python files so upgrades take effect immediately.
 	if err := extractBackendFiles(); err != nil {
@@ -58,6 +65,27 @@ func (a *App) startup(ctx context.Context) {
 	// Ensure .env and data directories exist (idempotent, safe on every startup).
 	createEnvFile()
 	createDataDirs()
+
+	// Verify Python dependencies are installed (handles partial pip failures)
+	if !checkDeps() {
+		log.Println("Dependencies missing, running pip install...")
+		if err := pipInstall(); err != nil {
+			runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Dependency Error",
+				Message: fmt.Sprintf("Failed to install Python dependencies:\n\n%v", err),
+			})
+			return
+		}
+		if !checkDeps() {
+			runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+				Type:    runtime.ErrorDialog,
+				Title:   "Dependency Error",
+				Message: "Python dependencies could not be installed.\nPlease check your internet connection and try again.",
+			})
+			return
+		}
+	}
 
 	// Check Python and FFmpeg
 	if !checkPython() {
@@ -112,13 +140,19 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
 	log.Println("Shutting down...")
+	if a.instanceListener != nil {
+		a.instanceListener.Close()
+	}
 	stopBackend(a.backendCmd)
 }
 
 // WatchSync opens a WebSocket connection to the backend and relays messages
 // to the frontend via Wails events. Called by the frontend when it wants
 // live sync updates (replaces direct WebSocket, which WebView2 blocks).
+// Blocks until the WS connection is established (or fails/times out) so that
+// the frontend knows the relay is ready before triggering the sync.
 func (a *App) WatchSync(sourceId int) {
+	ready := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	a.syncWatchCancels.Store(sourceId, cancel)
 	go func() {
@@ -128,11 +162,15 @@ func (a *App) WatchSync(sourceId int) {
 		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
 			fmt.Sprintf("ws://127.0.0.1:8000/ws/sync/%d", sourceId), nil)
 		if err != nil {
+			log.Printf("[WatchSync:%d] connect failed: %v", sourceId, err)
 			runtime.EventsEmit(a.ctx, eventName,
 				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			close(ready)
 			return
 		}
 		defer conn.Close()
+		log.Printf("[WatchSync:%d] connected", sourceId)
+		close(ready)
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
@@ -150,6 +188,11 @@ func (a *App) WatchSync(sourceId int) {
 			}
 		}
 	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		log.Printf("[WatchSync:%d] timeout waiting for WS connection", sourceId)
+	}
 }
 
 // StopWatchSync cancels the goroutine watching the given source (called on unmount).
@@ -161,7 +204,9 @@ func (a *App) StopWatchSync(sourceId int) {
 
 // WatchMoveLibrary opens a WebSocket to the backend and relays move-library
 // progress messages to the frontend via Wails events (mirrors WatchSync).
+// Blocks until the WS connection is established (or fails/times out).
 func (a *App) WatchMoveLibrary() {
+	ready := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	a.moveWatchMu.Lock()
 	if a.moveWatchCancel != nil {
@@ -174,11 +219,15 @@ func (a *App) WatchMoveLibrary() {
 		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
 			"ws://127.0.0.1:8000/ws/move-library", nil)
 		if err != nil {
+			log.Printf("[WatchMoveLibrary] connect failed: %v", err)
 			runtime.EventsEmit(a.ctx, "move-library",
 				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			close(ready)
 			return
 		}
 		defer conn.Close()
+		log.Printf("[WatchMoveLibrary] connected")
+		close(ready)
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
@@ -196,6 +245,11 @@ func (a *App) WatchMoveLibrary() {
 			}
 		}
 	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		log.Printf("[WatchMoveLibrary] timeout waiting for WS connection")
+	}
 }
 
 // StopWatchMoveLibrary cancels the goroutine watching the move-library operation.
@@ -275,19 +329,22 @@ func (a *App) DownloadAndInstall(latestVersion string) {
 				return
 			}
 			emit("done", 100, "Installer launched. The app will now close.")
-			runtime.Quit(a.ctx)
+			stopBackend(a.backendCmd)
+			a.quit()
 		} else {
 			if err := installLinux(tmpPath); err != nil {
 				emit("error", 0, "Failed to install update: "+err.Error())
 				return
 			}
-			if err := restartLinux(); err != nil {
-				emit("error", 0, "Update installed but failed to restart: "+err.Error())
-				return
-			}
 			emit("done", 100, "Update installed. Restarting…")
 			stopBackend(a.backendCmd)
-			runtime.Quit(a.ctx)
+			// Release single-instance port before spawning the new version.
+			if a.instanceListener != nil {
+				a.instanceListener.Close()
+				a.instanceListener = nil
+			}
+			restartLinux() //nolint:errcheck // best-effort, we're quitting anyway
+			a.quit()
 		}
 	}()
 }

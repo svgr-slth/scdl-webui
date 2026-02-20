@@ -50,12 +50,36 @@ jobs:
       - name: Bundle backend files
         run: make bundle
 
+      - name: Set version in wails.json
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > tmp.json && mv tmp.json wails.json
+
       # ── Windows: NSIS installer ──────────────────────────────────────────
       - name: Install NSIS (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          choco install nsis --no-progress -y
-          echo "C:/Program Files (x86)/NSIS" >> $GITHUB_PATH
+          # Try chocolatey first, fall back to direct download if it fails
+          $nsisInstalled = $false
+          try {
+            choco install nsis --no-progress -y
+            if ((Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+              $nsisInstalled = $true
+            }
+          } catch {}
+          if (-not $nsisInstalled) {
+            Write-Host "Chocolatey failed, downloading NSIS directly..."
+            $url = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.10/nsis-3.10-setup.exe/download"
+            Invoke-WebRequest -Uri $url -OutFile nsis-setup.exe -MaximumRedirection 5
+            Start-Process -FilePath .\nsis-setup.exe -ArgumentList "/S" -Wait
+          }
+          if (-not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            throw "NSIS installation failed: makensis.exe not found"
+          }
+          echo "C:/Program Files (x86)/NSIS" | Out-File -Append -FilePath $env:GITHUB_PATH
 
       - name: Build Windows + NSIS installer
         if: runner.os == 'Windows'
@@ -63,6 +87,9 @@ jobs:
         run: |
           $env:PATH = "C:\Program Files (x86)\NSIS;$env:PATH"
           wails build -clean -platform windows/amd64 -nsis -ldflags "-X 'main.Version=${{ github.ref_name }}'"
+          if (-not (Test-Path "build\bin\*-installer.exe")) {
+            throw "NSIS installer was not produced"
+          }
 
       - name: Upload Windows artifact
         if: runner.os == 'Windows'
@@ -70,6 +97,7 @@ jobs:
         with:
           name: scdl-web-windows-amd64-installer
           path: build/bin/*-installer.exe
+          if-no-files-found: error
 
       # ── Linux: AppImage (both WebKit variants) ─────────────────────────
       - name: Download appimagetool
@@ -95,6 +123,15 @@ jobs:
           sed -i 's|Exec=.*|Exec=scdl-web|' AppDir/scdl-web.desktop
           ARCH=x86_64 appimagetool AppDir build/bin/scdl-web-linux-amd64.AppImage
 
+      # Upload 4.0 NOW — before the 4.1 build with -clean wipes build/bin/
+      - name: Upload Linux artifact (webkit2gtk-4.0)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: scdl-web-linux-amd64-appimage
+          path: build/bin/scdl-web-linux-amd64.AppImage
+          if-no-files-found: error
+
       # Build 2: webkit2gtk-4.1 (Arch, Fedora 39+, Ubuntu 24.04+)
       - name: Build Linux (webkit2gtk-4.1)
         if: runner.os == 'Linux'
@@ -111,19 +148,13 @@ jobs:
           sed -i 's|Exec=.*|Exec=scdl-web|' AppDir/scdl-web.desktop
           ARCH=x86_64 appimagetool AppDir build/bin/scdl-web-linux-amd64-webkit4.1.AppImage
 
-      - name: Upload Linux artifact (webkit2gtk-4.0)
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: scdl-web-linux-amd64-appimage
-          path: build/bin/scdl-web-linux-amd64.AppImage
-
       - name: Upload Linux artifact (webkit2gtk-4.1)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: scdl-web-linux-amd64-webkit41-appimage
           path: build/bin/scdl-web-linux-amd64-webkit4.1.AppImage
+          if-no-files-found: error
 
   release:
     needs: build
