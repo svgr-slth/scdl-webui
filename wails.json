@@ -8,6 +8,13 @@
   "frontend:dev:serverUrl": "auto",
   "frontend:dir": "frontend",
   "wailsjsdir": "frontend/src",
+  "info": {
+    "productVersion": "0.0.0",
+    "productName": "scdl-web",
+    "companyName": "scdl-web",
+    "copyright": "",
+    "comments": ""
+  },
   "author": {
     "name": ""
   }

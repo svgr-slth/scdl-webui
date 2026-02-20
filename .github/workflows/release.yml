@@ -50,6 +50,13 @@ jobs:
       - name: Bundle backend files
         run: make bundle
 
+      - name: Set version in wails.json
+        shell: bash
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > tmp.json && mv tmp.json wails.json
+
       # ── Windows: NSIS installer ──────────────────────────────────────────
       - name: Install NSIS (Windows)
         if: runner.os == 'Windows'

@@ -176,13 +176,13 @@ func updateTempPath() (string, error) {
 	return filepath.Join(os.TempDir(), "scdl-web.update.AppImage"), nil
 }
 
-// installWindows launches the NSIS installer with explicit UAC elevation.
-// Uses PowerShell Start-Process -Verb RunAs to reliably trigger the UAC prompt.
-// If the user cancels UAC, an error is returned.
-// The caller should quit the app after calling this.
+// installWindows launches the NSIS installer with UAC elevation.
+// The installer UI is shown so the user sees version info and can choose to
+// launch the app on the finish page. The NSIS script kills the running
+// scdl-web process tree before copying files, so file-lock issues are avoided.
 func installWindows(installerPath string) error {
 	cmd := exec.Command("powershell", "-WindowStyle", "Hidden", "-Command",
-		fmt.Sprintf(`Start-Process -FilePath '%s' -ArgumentList '/S' -Verb RunAs`,
+		fmt.Sprintf(`Start-Process -FilePath '%s' -Verb RunAs`,
 			installerPath))
 	return cmd.Run()
 }

@@ -11,3 +11,6 @@ dist/
 # Wails
 bundle/
 build/bin/
+
+# Dev scripts
+release.sh
