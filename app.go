@@ -329,19 +329,22 @@ func (a *App) DownloadAndInstall(latestVersion string) {
 				return
 			}
 			emit("done", 100, "Installer launched. The app will now close.")
-			runtime.Quit(a.ctx)
+			stopBackend(a.backendCmd)
+			a.quit()
 		} else {
 			if err := installLinux(tmpPath); err != nil {
 				emit("error", 0, "Failed to install update: "+err.Error())
 				return
 			}
-			if err := restartLinux(); err != nil {
-				emit("error", 0, "Update installed but failed to restart: "+err.Error())
-				return
-			}
 			emit("done", 100, "Update installed. Restarting…")
 			stopBackend(a.backendCmd)
-			runtime.Quit(a.ctx)
+			// Release single-instance port before spawning the new version.
+			if a.instanceListener != nil {
+				a.instanceListener.Close()
+				a.instanceListener = nil
+			}
+			restartLinux() //nolint:errcheck // best-effort, we're quitting anyway
+			a.quit()
 		}
 	}()
 }
