@@ -35,6 +35,20 @@ async def get_source_sync_status(source_id: int):
     return {"is_syncing": sync_manager.is_source_syncing(source_id)}
 
 
+@router.get("/{source_id}/live")
+async def get_source_live_state(source_id: int, cursor: int = 0):
+    state = sync_manager.get_live_state(source_id)
+    effective_cursor = min(cursor, len(state.logs))
+    return {
+        "status": state.status,
+        "logs": state.logs[effective_cursor:],
+        "cursor": len(state.logs),
+        "progress": state.progress,
+        "stats": state.stats,
+        "error": state.error,
+    }
+
+
 @router.post("/{source_id}")
 async def trigger_sync(source_id: int, db: AsyncSession = Depends(get_db)):
     source = await db.get(Source, source_id)

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime";
-import { WatchMoveLibrary, StopWatchMoveLibrary } from "../wailsjs/go/main/App";
+import { BASE_URL } from "../api/client";
 
 interface LogLine {
   line: string;
@@ -64,16 +63,43 @@ export function useMoveWebSocket(active: boolean) {
     }
 
     // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
-    // connections. Use the Go-side bridge instead (mirrors useSyncWebSocket).
+    // connections and EventsEmit from goroutines is unreliable.
+    // Use HTTP polling instead — the only channel that reliably works on Windows.
     if (window.location.protocol === "wails:") {
-      WatchMoveLibrary();
+      let cursor = 0;
+      let isActive = true;
+      let timeoutId: ReturnType<typeof setTimeout>;
       setConnected(true);
-      EventsOn("move-library", (raw: string) => {
-        handleMessage(JSON.parse(raw));
-      });
+
+      const poll = async () => {
+        if (!isActive) return;
+        try {
+          const res = await fetch(`${BASE_URL}/move-library/live?cursor=${cursor}`);
+          if (!res.ok) throw new Error("poll failed");
+          const data = await res.json();
+
+          handleMessage({ type: "status", status: data.status as MoveStatus, error: data.error ?? undefined });
+          for (const line of (data.logs as string[])) {
+            handleMessage({ type: "log", line });
+          }
+          if (data.progress) {
+            handleMessage({ type: "progress", current: data.progress.current, total: data.progress.total });
+          }
+          cursor = data.cursor;
+
+          const isTerminal = ["completed", "failed"].includes(data.status);
+          if (!isTerminal) {
+            timeoutId = setTimeout(poll, data.status === "idle" ? 2000 : 300);
+          }
+        } catch {
+          if (isActive) timeoutId = setTimeout(poll, 1000);
+        }
+      };
+
+      poll();
       return () => {
-        EventsOff("move-library");
-        StopWatchMoveLibrary();
+        isActive = false;
+        clearTimeout(timeoutId);
         setConnected(false);
       };
     }

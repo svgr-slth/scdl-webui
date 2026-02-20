@@ -1,5 +1,6 @@
 import asyncio
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,10 +14,20 @@ from app.services.scdl_runner import ScdlRunner
 from app.config import settings
 
 
+@dataclass
+class SyncLiveState:
+    status: str = "idle"
+    logs: list[str] = field(default_factory=list)
+    progress: dict | None = None
+    stats: dict | None = None
+    error: str | None = None
+
+
 class SyncManager:
     def __init__(self):
         self.active_tasks: dict[int, asyncio.Task] = {}
         self.log_buffers: dict[int, list[str]] = {}
+        self._live: dict[int, SyncLiveState] = {}
         self._runner = ScdlRunner(settings.music_root, settings.archives_root)
         self._ws_manager = None
 
@@ -45,6 +56,9 @@ class SyncManager:
         if self.active_tasks:
             return next(iter(self.active_tasks.keys()))
         return None
+
+    def get_live_state(self, source_id: int) -> SyncLiveState:
+        return self._live.get(source_id, SyncLiveState())
 
     async def start_sync(self, source_id: int) -> str:
         from app.services.library_mover import library_mover
@@ -104,6 +118,9 @@ class SyncManager:
             await db.commit()
             await db.refresh(run)
 
+            # Reset live state for this sync (clears previous run's data)
+            self._live[source_id] = SyncLiveState(status="running")
+
             # Init log buffer for this source
             self.log_buffers[source_id] = []
 
@@ -112,6 +129,7 @@ class SyncManager:
             if pruned > 0:
                 prune_msg = f"[pre-sync] {pruned} missing files will be re-downloaded"
                 self.log_buffers.setdefault(source_id, []).append(prune_msg)
+                self._live[source_id].logs.append(prune_msg)
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "log",
@@ -126,6 +144,7 @@ class SyncManager:
             async def on_output(line: str):
                 nonlocal total_items, processed_items
                 self.log_buffers.setdefault(source_id, []).append(line)
+                self._live[source_id].logs.append(line)
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "log",
@@ -143,13 +162,18 @@ class SyncManager:
                     or "Removing" in line):
                     processed_items += 1
 
-                # Broadcast progress if we know the total
-                if total_items > 0 and self._ws_manager:
-                    await self._ws_manager.broadcast(source_id, {
-                        "type": "progress",
+                # Update live progress and broadcast
+                if total_items > 0:
+                    self._live[source_id].progress = {
                         "current": min(processed_items, total_items),
                         "total": total_items,
-                    })
+                    }
+                    if self._ws_manager:
+                        await self._ws_manager.broadcast(source_id, {
+                            "type": "progress",
+                            "current": min(processed_items, total_items),
+                            "total": total_items,
+                        })
 
             try:
                 if self._ws_manager:
@@ -171,6 +195,16 @@ class SyncManager:
 
                 await db.commit()
 
+                # Update live state with final result
+                self._live[source_id].status = run.status
+                self._live[source_id].stats = {
+                    "added": result.tracks_added,
+                    "removed": result.tracks_removed,
+                    "skipped": result.tracks_skipped,
+                }
+                if not result.success:
+                    self._live[source_id].error = run.error_message
+
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "stats",
@@ -187,6 +221,7 @@ class SyncManager:
                 run.status = "cancelled"
                 run.finished_at = datetime.now(timezone.utc)
                 await db.commit()
+                self._live[source_id].status = "cancelled"
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "status",
@@ -197,6 +232,8 @@ class SyncManager:
                 run.finished_at = datetime.now(timezone.utc)
                 run.error_message = str(e)
                 await db.commit()
+                self._live[source_id].status = "failed"
+                self._live[source_id].error = str(e)
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "status",
@@ -206,6 +243,7 @@ class SyncManager:
             finally:
                 self.active_tasks.pop(source_id, None)
                 self.log_buffers.pop(source_id, None)
+                # _live[source_id] intentionally kept so polling can read final state
 
 
 sync_manager = SyncManager()

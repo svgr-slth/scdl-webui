@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c:*)",
+      "Bash(powershell -Command \"Get-Command go | Select-Object -ExpandProperty Source\")",
+      "Bash(echo:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/Go/bin\")",
+      "Bash(go get:*)",
+      "Bash(go build:*)",
+      "Bash(wails build:*)",
+      "Bash(make:*)"
+    ]
+  }
+}

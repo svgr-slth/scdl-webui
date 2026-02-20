@@ -209,10 +209,15 @@ class ScdlRunner:
         # Load existing filemap to extend during sync
         filemap = self._load_filemap(source.id)
 
+        # On Windows, yt-dlp writes to both stdout and stderr; merging them
+        # (stderr=STDOUT) causes every line to appear twice. Discard stderr on
+        # Windows since stdout already carries the full output. On Linux,
+        # yt-dlp writes only to stderr so we keep the merge.
+        stderr_pipe = asyncio.subprocess.DEVNULL if sys.platform == "win32" else asyncio.subprocess.STDOUT
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=stderr_pipe,
         )
 
         lines: list[str] = []

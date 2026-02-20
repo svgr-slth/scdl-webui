@@ -44,6 +44,11 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/move-library/live")
+async def get_move_live_state(cursor: int = 0):
+    return library_mover.get_live_state(cursor)
+
+
 @app.websocket("/ws/sync/{source_id}")
 async def websocket_sync(websocket: WebSocket, source_id: int):
     await ws_manager.connect(source_id, websocket)

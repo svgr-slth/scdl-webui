@@ -231,6 +231,19 @@ class LibraryMover:
                 db.add(GlobalSetting(key="music_root", value=str(new_root)))
             await db.commit()
 
+    def get_live_state(self, cursor: int = 0) -> dict:
+        effective_cursor = min(cursor, len(self.log_lines))
+        return {
+            "status": self.status,
+            "logs": self.log_lines[effective_cursor:],
+            "cursor": len(self.log_lines),
+            "progress": {
+                "current": self.moved_files,
+                "total": self.total_files,
+            } if self.total_files > 0 else None,
+            "error": self.error,
+        }
+
     @staticmethod
     def _is_same_filesystem(path1: Path, path2: Path) -> bool:
         try:

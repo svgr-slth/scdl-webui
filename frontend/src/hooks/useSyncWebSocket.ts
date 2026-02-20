@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { WsMessage } from "../types/sync";
-import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime";
-import { WatchSync, StopWatchSync } from "../wailsjs/go/main/App";
+import { BASE_URL } from "../api/client";
 
 interface LogLine {
   line: string;
@@ -59,16 +58,48 @@ export function useSyncWebSocket(sourceId: number | null) {
     }
 
     // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
-    // connections. Use the Go-side bridge instead: WatchSync opens a WS
-    // connection server-side and relays messages via Wails EventsEmit.
+    // connections and EventsEmit from goroutines is unreliable.
+    // Use HTTP polling instead — the only channel that reliably works on Windows.
     if (window.location.protocol === "wails:") {
-      const eventName = `sync:${sourceId}`;
-      WatchSync(sourceId);
+      let cursor = 0;
+      let active = true;
+      let timeoutId: ReturnType<typeof setTimeout>;
       setConnected(true);
-      EventsOn(eventName, handleMessage);
+
+      const poll = async () => {
+        if (!active) return;
+        try {
+          const res = await fetch(`${BASE_URL}/sync/${sourceId}/live?cursor=${cursor}`);
+          if (!res.ok) throw new Error("poll failed");
+          const data = await res.json();
+
+          // Only emit status when non-idle (avoid overwriting local state before sync starts)
+          if (data.status && data.status !== "idle") {
+            handleMessage(JSON.stringify({ type: "status", status: data.status, error: data.error ?? null }));
+          }
+          for (const line of (data.logs as string[])) {
+            handleMessage(JSON.stringify({ type: "log", line }));
+          }
+          if (data.progress) {
+            handleMessage(JSON.stringify({ type: "progress", ...data.progress }));
+          }
+          if (data.stats) {
+            handleMessage(JSON.stringify({ type: "stats", ...data.stats }));
+          }
+          cursor = data.cursor;
+
+          // Slow poll when idle/terminal so we can detect a new sync starting
+          const isTerminal = ["completed", "failed", "cancelled"].includes(data.status);
+          timeoutId = setTimeout(poll, isTerminal || data.status === "idle" ? 2000 : 300);
+        } catch {
+          if (active) timeoutId = setTimeout(poll, 1000);
+        }
+      };
+
+      poll();
       return () => {
-        EventsOff(eventName);
-        StopWatchSync(sourceId);
+        active = false;
+        clearTimeout(timeoutId);
         setConnected(false);
       };
     }
