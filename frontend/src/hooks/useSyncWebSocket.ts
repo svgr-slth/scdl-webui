@@ -8,7 +8,7 @@ interface LogLine {
   ts: number;
 }
 
-export function useSyncWebSocket(sourceId: number | null) {
+export function useSyncWebSocket(sourceId: number | null, syncKey: number = 0) {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [status, setStatus] = useState<string>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export function useSyncWebSocket(sourceId: number | null) {
       wsRef.current = null;
       setConnected(false);
     };
-  }, [sourceId]);
+  }, [sourceId, syncKey]);
 
   return { logs, status, error, stats, progress, clear, connected };
 }

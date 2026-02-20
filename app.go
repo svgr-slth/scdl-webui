@@ -140,10 +140,14 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
 	log.Println("Shutting down...")
+	// Kill backend first and wait for it to fully exit so port 8000 is freed
+	// before we release port 47200. If the order were reversed, a relaunching
+	// second instance could grab port 47200 and try to start its own backend
+	// while our uvicorn is still listening on 8000, causing a bind error.
+	stopBackend(a.backendCmd)
 	if a.instanceListener != nil {
 		a.instanceListener.Close()
 	}
-	stopBackend(a.backendCmd)
 }
 
 // WatchSync opens a WebSocket connection to the backend and relays messages

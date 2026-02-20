@@ -26,6 +26,7 @@ export function SourceDetail() {
   const qc = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
+  const [syncKey, setSyncKey] = useState(0);
   const [checkedInitial, setCheckedInitial] = useState(false);
   const [resetConfirmOpened, setResetConfirmOpened] = useState(false);
   const [settingsOpened, { toggle: toggleSettings }] = useDisclosure(false);
@@ -43,7 +44,7 @@ export function SourceDetail() {
   }, [sourceId]);
 
   // Connect WebSocket when syncing
-  const { logs, status, error, stats, progress, clear, connected } = useSyncWebSocket(isSyncing ? sourceId : null);
+  const { logs, status, error, stats, progress, clear, connected } = useSyncWebSocket(isSyncing ? sourceId : null, syncKey);
 
   // When WS is connected and we have a pending sync, trigger it
   useEffect(() => {
@@ -65,6 +66,7 @@ export function SourceDetail() {
     clear();
     setIsSyncing(true);
     setPendingSync(true);
+    setSyncKey((k) => k + 1);
   }, [clear]);
 
   const handleUpdate = async (data: SourceCreate) => {

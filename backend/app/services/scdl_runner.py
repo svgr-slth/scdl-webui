@@ -12,6 +12,28 @@ from app.models.source import Source
 
 logger = logging.getLogger(__name__)
 
+# Audio extensions that can be stored in the filemap (excludes thumbnails, etc.)
+_AUDIO_EXTS = {".mp3", ".flac", ".opus", ".m4a", ".ogg", ".wav"}
+
+# Matches literal \uXXXX / \UXXXXXXXX sequences written by Windows Python when
+# stdout encoding falls back to ASCII (e.g. scdl subprocess without UTF-8 mode).
+_UNICODE_ESCAPE_RE = re.compile(r"\\u([0-9a-fA-F]{4})|\\U([0-9a-fA-F]{8})")
+
+
+def _fix_unicode_escapes(path: str) -> str:
+    """Decode literal \\uXXXX / \\UXXXXXXXX sequences in a path string.
+
+    On Windows, if the scdl subprocess runs without PYTHONUTF8=1, non-ASCII
+    characters in file paths are printed as Python escape sequences instead of
+    the real Unicode character.  This causes stored paths to not match what
+    exists on disk.  The substitution is safe because it is only applied when
+    the original path does NOT exist but the decoded one does.
+    """
+    def _replace(m: re.Match) -> str:
+        code = m.group(1) or m.group(2)
+        return chr(int(code, 16))
+    return _UNICODE_ESCAPE_RE.sub(_replace, path)
+
 
 def _find_scdl() -> str:
     """Return the full path to the scdl executable.
@@ -72,7 +94,7 @@ class ScdlRunner:
         path = self._filemap_path(source_id)
         if path.exists():
             try:
-                return json.loads(path.read_text())
+                return json.loads(path.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 logger.warning("Corrupt filemap at %s, starting fresh", path)
         return {}
@@ -80,7 +102,7 @@ class ScdlRunner:
     def _save_filemap(self, source_id: int, filemap: dict[str, str]) -> None:
         path = self._filemap_path(source_id)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(filemap, indent=2))
+        path.write_text(json.dumps(filemap, indent=2), encoding="utf-8")
 
     # ── Pre-sync: regenerate archive files from disk ────────────
 
@@ -101,22 +123,33 @@ class ScdlRunner:
         pruned = 0
 
         for track_id, filepath in filemap.items():
-            if Path(filepath).exists():
-                archive_lines.append(f"soundcloud {track_id}")
-                sync_lines.append(f"soundcloud {track_id} {filepath}")
-                live_filemap[track_id] = filepath
-            else:
-                pruned += 1
+            actual_path = filepath
+            if not Path(filepath).exists():
+                # Legacy filemap entries may have \uXXXX escape sequences
+                # instead of real Unicode (Windows encoding bug). Try to repair.
+                fixed = _fix_unicode_escapes(filepath)
+                if fixed != filepath and Path(fixed).exists():
+                    actual_path = fixed
+                else:
+                    pruned += 1
+                    continue
+            archive_lines.append(f"soundcloud {track_id}")
+            sync_lines.append(f"soundcloud {track_id} {actual_path}")
+            live_filemap[track_id] = actual_path
 
         self.archives_root.mkdir(parents=True, exist_ok=True)
 
         # Write archive (yt-dlp format: "soundcloud {id}")
         self._archive_path(source_id).write_text(
-            "\n".join(archive_lines) + "\n" if archive_lines else ""
+            "\n".join(archive_lines) + "\n" if archive_lines else "",
+            encoding="utf-8",
         )
         # Write sync file (scdl format: "soundcloud {id} /path/to/file")
+        # Must use UTF-8: paths may contain Unicode chars (U+FF1A, etc.) that
+        # the Windows default encoding (CP1252) cannot represent.
         self._sync_file_path(source_id).write_text(
-            "\n".join(sync_lines) + "\n" if sync_lines else ""
+            "\n".join(sync_lines) + "\n" if sync_lines else "",
+            encoding="utf-8",
         )
 
         if pruned > 0:
@@ -209,15 +242,19 @@ class ScdlRunner:
         # Load existing filemap to extend during sync
         filemap = self._load_filemap(source.id)
 
-        # On Windows, yt-dlp writes to both stdout and stderr; merging them
-        # (stderr=STDOUT) causes every line to appear twice. Discard stderr on
-        # Windows since stdout already carries the full output. On Linux,
-        # yt-dlp writes only to stderr so we keep the merge.
-        stderr_pipe = asyncio.subprocess.DEVNULL if sys.platform == "win32" else asyncio.subprocess.STDOUT
+        # Merge stderr into stdout so we capture yt-dlp output on all platforms.
+        # yt-dlp writes to stderr; PYTHONUTF8=1 makes it use UTF-8 which also
+        # prevents the dual-stream encoding fallback that caused doubled lines.
+        stderr_pipe = asyncio.subprocess.STDOUT
+        # PYTHONUTF8=1 forces the scdl subprocess to output Unicode characters
+        # directly instead of ASCII \uXXXX escape sequences, so file paths
+        # captured from stdout correctly match what exists on disk.
+        env = {**os.environ, "PYTHONUTF8": "1"}
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=stderr_pipe,
+            env=env,
         )
 
         lines: list[str] = []
@@ -236,16 +273,22 @@ class ScdlRunner:
             if m:
                 current_track_id = m.group(1)
 
-            # Filename detection — associate with current track ID
+            # Filename detection — associate with current track ID.
+            # Only store audio files; thumbnails (.jpg/.png) also produce
+            # Destination: lines and must not overwrite the mp3 path.
             m = destination_re.search(line)
             if m and current_track_id:
-                filemap[current_track_id] = m.group(1)
+                dest = m.group(1)
+                if Path(dest).suffix.lower() in _AUDIO_EXTS:
+                    filemap[current_track_id] = dest
 
             # Also capture "already downloaded" files (exist on disk but not in archive)
             if "has already been downloaded" in line and current_track_id:
                 m = re.match(r"\[download\]\s+(.+?)\s+has already been downloaded", line)
                 if m:
-                    filemap[current_track_id] = m.group(1)
+                    dest = m.group(1)
+                    if Path(dest).suffix.lower() in _AUDIO_EXTS:
+                        filemap[current_track_id] = dest
 
         return_code = await process.wait()
 
