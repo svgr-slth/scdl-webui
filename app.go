@@ -118,7 +118,10 @@ func (a *App) shutdown(ctx context.Context) {
 // WatchSync opens a WebSocket connection to the backend and relays messages
 // to the frontend via Wails events. Called by the frontend when it wants
 // live sync updates (replaces direct WebSocket, which WebView2 blocks).
+// Blocks until the WS connection is established (or fails/times out) so that
+// the frontend knows the relay is ready before triggering the sync.
 func (a *App) WatchSync(sourceId int) {
+	ready := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	a.syncWatchCancels.Store(sourceId, cancel)
 	go func() {
@@ -128,11 +131,15 @@ func (a *App) WatchSync(sourceId int) {
 		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
 			fmt.Sprintf("ws://127.0.0.1:8000/ws/sync/%d", sourceId), nil)
 		if err != nil {
+			log.Printf("[WatchSync:%d] connect failed: %v", sourceId, err)
 			runtime.EventsEmit(a.ctx, eventName,
 				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			close(ready)
 			return
 		}
 		defer conn.Close()
+		log.Printf("[WatchSync:%d] connected", sourceId)
+		close(ready)
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
@@ -150,6 +157,11 @@ func (a *App) WatchSync(sourceId int) {
 			}
 		}
 	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		log.Printf("[WatchSync:%d] timeout waiting for WS connection", sourceId)
+	}
 }
 
 // StopWatchSync cancels the goroutine watching the given source (called on unmount).
@@ -161,7 +173,9 @@ func (a *App) StopWatchSync(sourceId int) {
 
 // WatchMoveLibrary opens a WebSocket to the backend and relays move-library
 // progress messages to the frontend via Wails events (mirrors WatchSync).
+// Blocks until the WS connection is established (or fails/times out).
 func (a *App) WatchMoveLibrary() {
+	ready := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	a.moveWatchMu.Lock()
 	if a.moveWatchCancel != nil {
@@ -174,11 +188,15 @@ func (a *App) WatchMoveLibrary() {
 		conn, _, err := gorilla.DefaultDialer.DialContext(ctx,
 			"ws://127.0.0.1:8000/ws/move-library", nil)
 		if err != nil {
+			log.Printf("[WatchMoveLibrary] connect failed: %v", err)
 			runtime.EventsEmit(a.ctx, "move-library",
 				`{"type":"status","status":"failed","error":"backend unavailable"}`)
+			close(ready)
 			return
 		}
 		defer conn.Close()
+		log.Printf("[WatchMoveLibrary] connected")
+		close(ready)
 		for {
 			_, raw, err := conn.ReadMessage()
 			if err != nil {
@@ -196,6 +214,11 @@ func (a *App) WatchMoveLibrary() {
 			}
 		}
 	}()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		log.Printf("[WatchMoveLibrary] timeout waiting for WS connection")
+	}
 }
 
 // StopWatchMoveLibrary cancels the goroutine watching the move-library operation.

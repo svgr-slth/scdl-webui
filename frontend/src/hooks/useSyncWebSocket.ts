@@ -58,15 +58,23 @@ export function useSyncWebSocket(sourceId: number | null) {
       }
     }
 
-    // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
-    // connections. Use the Go-side bridge instead: WatchSync opens a WS
-    // connection server-side and relays messages via Wails EventsEmit.
-    if (window.location.protocol === "wails:") {
+    // In Wails builds (all platforms), direct WebSocket connections from the
+    // WebView don't reach the Python backend. Use the Go-side bridge instead:
+    // WatchSync opens a WS connection server-side and relays via EventsEmit.
+    // Note: window.runtime is injected by Wails on all platforms; the old
+    // "wails:" protocol check only worked on Linux (Windows uses http://).
+    const isWails = typeof (window as any).runtime !== "undefined";
+    if (isWails) {
       const eventName = `sync:${sourceId}`;
-      WatchSync(sourceId);
-      setConnected(true);
+      let cancelled = false;
+      // Register listener BEFORE the connection is ready so no messages are lost.
       EventsOn(eventName, handleMessage);
+      // WatchSync blocks until Go's WS to the backend is established, then resolves.
+      WatchSync(sourceId).then(() => {
+        if (!cancelled) setConnected(true);
+      });
       return () => {
+        cancelled = true;
         EventsOff(eventName);
         StopWatchSync(sourceId);
         setConnected(false);

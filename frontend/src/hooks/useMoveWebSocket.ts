@@ -63,15 +63,21 @@ export function useMoveWebSocket(active: boolean) {
       }
     }
 
-    // Under Wails (wails:// protocol), WebView2 blocks direct WebSocket
-    // connections. Use the Go-side bridge instead (mirrors useSyncWebSocket).
-    if (window.location.protocol === "wails:") {
-      WatchMoveLibrary();
-      setConnected(true);
+    // In Wails builds (all platforms), direct WebSocket connections from the
+    // WebView don't reach the Python backend. Use the Go-side bridge instead.
+    const isWails = typeof (window as any).runtime !== "undefined";
+    if (isWails) {
+      let cancelled = false;
+      // Register listener BEFORE the connection is ready so no messages are lost.
       EventsOn("move-library", (raw: string) => {
         handleMessage(JSON.parse(raw));
       });
+      // WatchMoveLibrary blocks until Go's WS to the backend is established.
+      WatchMoveLibrary().then(() => {
+        if (!cancelled) setConnected(true);
+      });
       return () => {
+        cancelled = true;
         EventsOff("move-library");
         StopWatchMoveLibrary();
         setConnected(false);
