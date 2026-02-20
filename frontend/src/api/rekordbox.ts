@@ -14,6 +14,7 @@ export interface RekordboxStatus {
   xml_path: string;
   total_tracks: number;
   total_playlists: number;
+  detected_paths: string[];
 }
 
 export const rekordboxApi = {
@@ -22,4 +23,5 @@ export const rekordboxApi = {
   exportAsPlaylist: (sourceId: number) =>
     api.post<RekordboxExportResult>(`/rekordbox/${sourceId}/playlist`),
   status: () => api.get<RekordboxStatus>("/rekordbox/status"),
+  discover: () => api.get<{ detected_paths: string[] }>("/rekordbox/discover"),
 };

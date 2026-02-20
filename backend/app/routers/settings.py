@@ -17,6 +17,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 SETTING_KEYS = [
     "auth_token", "default_audio_format", "default_name_format", "music_root",
     "auto_sync_enabled", "auto_sync_interval_minutes", "max_concurrent_syncs",
+    "rekordbox_xml_path",
 ]
 
 
@@ -39,6 +40,7 @@ def _build_settings_read(settings: dict[str, str | None]) -> SettingsRead:
         max_concurrent_syncs=int(settings["max_concurrent_syncs"])
         if settings.get("max_concurrent_syncs")
         else 2,
+        rekordbox_xml_path=settings.get("rekordbox_xml_path"),
     )
 
 

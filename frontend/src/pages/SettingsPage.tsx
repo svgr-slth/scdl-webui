@@ -13,7 +13,6 @@ import {
   Progress,
   Switch,
   NumberInput,
-  Code,
 } from "@mantine/core";
 import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
@@ -45,6 +44,9 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [autoSyncSaved, setAutoSyncSaved] = useState(false);
   const [folderPickerOpened, setFolderPickerOpened] = useState(false);
+  const [rekordboxXmlPath, setRekordboxXmlPath] = useState("");
+  const [rekordboxSaved, setRekordboxSaved] = useState(false);
+  const [rekordboxFolderPickerOpened, setRekordboxFolderPickerOpened] = useState(false);
 
   // Move library state
   const [moveConfirmOpened, setMoveConfirmOpened] = useState(false);
@@ -72,6 +74,7 @@ export function SettingsPage() {
       setAutoSyncEnabled(settings.auto_sync_enabled ?? false);
       setAutoSyncInterval(settings.auto_sync_interval_minutes ?? 60);
       setMaxConcurrentSyncs(settings.max_concurrent_syncs ?? 2);
+      setRekordboxXmlPath(settings.rekordbox_xml_path || "");
     }
   }, [settings]);
 
@@ -294,6 +297,46 @@ export function SettingsPage() {
           <Title order={4}>Rekordbox</Title>
         </Group>
         <Stack gap="sm">
+          <div>
+            <Group gap="xs" align="flex-end">
+              <TextInput
+                flex={1}
+                label="Rekordbox XML Path"
+                value={rekordboxXmlPath}
+                onChange={(e) => setRekordboxXmlPath(e.currentTarget.value)}
+                placeholder={rekordboxStatus?.xml_path ?? "rekordbox-export.xml"}
+                description="Path to the Rekordbox XML file for exporting tracks and playlists"
+              />
+              <Button
+                variant="light"
+                leftSection={<IconFolder size={16} />}
+                onClick={() => setRekordboxFolderPickerOpened(true)}
+              >
+                Browse
+              </Button>
+            </Group>
+          </div>
+          <FolderPicker
+            opened={rekordboxFolderPickerOpened}
+            onClose={() => setRekordboxFolderPickerOpened(false)}
+            onSelect={setRekordboxXmlPath}
+            initialPath={rekordboxXmlPath || "/"}
+          />
+          {rekordboxStatus?.detected_paths && rekordboxStatus.detected_paths.length > 0 && (
+            <Alert color="teal" variant="light">
+              <Text size="sm" fw={500} mb={4}>Rekordbox installation detected:</Text>
+              {rekordboxStatus.detected_paths.map((p) => (
+                <Text
+                  key={p}
+                  size="xs"
+                  style={{ cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => setRekordboxXmlPath(p)}
+                >
+                  {p}
+                </Text>
+              ))}
+            </Alert>
+          )}
           {rekordboxStatus?.xml_exists && (
             <>
               <Group gap="xs">
@@ -306,10 +349,23 @@ export function SettingsPage() {
               </Group>
             </>
           )}
-          <div>
-            <Text size="sm" fw={500} mb={4}>XML file path:</Text>
-            <Code block>{rekordboxStatus?.xml_path ?? "N/A"}</Code>
-          </div>
+          <Button
+            onClick={async () => {
+              await updateSettings.mutateAsync({
+                rekordbox_xml_path: rekordboxXmlPath || null,
+              });
+              setRekordboxSaved(true);
+              setTimeout(() => setRekordboxSaved(false), 3000);
+            }}
+            loading={updateSettings.isPending}
+          >
+            Save
+          </Button>
+          {rekordboxSaved && (
+            <Alert color="green" icon={<IconCheck size={16} />}>
+              Rekordbox settings saved
+            </Alert>
+          )}
           <Alert color="blue" variant="light">
             <Text size="sm">
               In Rekordbox, go to <strong>Preferences &gt; Advanced &gt; Browse</strong> and select the XML file above to import your tracks and playlists.

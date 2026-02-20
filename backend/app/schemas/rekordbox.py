@@ -15,3 +15,4 @@ class RekordboxStatus(BaseModel):
     xml_path: str
     total_tracks: int
     total_playlists: int
+    detected_paths: list[str] = []

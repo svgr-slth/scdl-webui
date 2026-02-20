@@ -9,6 +9,7 @@ class SettingsRead(BaseModel):
     auto_sync_enabled: bool = False
     auto_sync_interval_minutes: int = 60
     max_concurrent_syncs: int = 2
+    rekordbox_xml_path: str | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -19,3 +20,4 @@ class SettingsUpdate(BaseModel):
     auto_sync_enabled: bool | None = None
     auto_sync_interval_minutes: int | None = None
     max_concurrent_syncs: int | None = None
+    rekordbox_xml_path: str | None = None

@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -27,10 +28,31 @@ def _get_data_dir() -> Path:
     return db_path.parent
 
 
-def _get_xml_path() -> Path:
-    """Return the path to the shared Rekordbox XML export file."""
-    import os
+def discover_xml_paths() -> list[str]:
+    """Scan default OS locations for existing rekordbox.xml files."""
+    candidates: list[str] = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            for subdir in ["rekordbox", "rekordbox6", "rekordbox5"]:
+                p = Path(appdata) / "Pioneer" / subdir / "rekordbox.xml"
+                if p.exists():
+                    candidates.append(str(p))
+    elif sys.platform == "darwin":
+        home = Path.home()
+        for subdir in ["rekordbox", "rekordbox6", "rekordbox5"]:
+            p = home / "Library" / "Pioneer" / subdir / "rekordbox.xml"
+            if p.exists():
+                candidates.append(str(p))
+    return candidates
 
+
+async def _get_xml_path() -> Path:
+    """Resolve the Rekordbox XML path: DB setting > env var > default."""
+    async with async_session() as db:
+        row = await db.get(GlobalSetting, "rekordbox_xml_path")
+        if row and row.value:
+            return Path(row.value)
     custom = os.environ.get("REKORDBOX_XML_PATH")
     if custom:
         return Path(custom)
@@ -101,7 +123,7 @@ async def export_to_collection(source_id: int) -> RekordboxExportResult:
     if not audio_files:
         raise FileNotFoundError(f"No audio files found in {folder}")
 
-    xml_path = _get_xml_path()
+    xml_path = await _get_xml_path()
     xml_path.parent.mkdir(parents=True, exist_ok=True)
     xml = _load_or_create_xml(xml_path)
 
@@ -153,7 +175,7 @@ async def export_as_playlist(source_id: int) -> RekordboxExportResult:
     if not audio_files:
         raise FileNotFoundError(f"No audio files found in {folder}")
 
-    xml_path = _get_xml_path()
+    xml_path = await _get_xml_path()
     xml_path.parent.mkdir(parents=True, exist_ok=True)
     xml = _load_or_create_xml(xml_path)
 
@@ -208,7 +230,7 @@ async def export_as_playlist(source_id: int) -> RekordboxExportResult:
 
 async def get_status() -> RekordboxStatus:
     """Return the current status of the Rekordbox XML export."""
-    xml_path = _get_xml_path()
+    xml_path = await _get_xml_path()
     total_tracks = 0
     total_playlists = 0
 
@@ -227,4 +249,5 @@ async def get_status() -> RekordboxStatus:
         xml_path=str(xml_path),
         total_tracks=total_tracks,
         total_playlists=total_playlists,
+        detected_paths=discover_xml_paths(),
     )

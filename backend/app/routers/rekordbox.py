@@ -22,6 +22,13 @@ async def export_as_playlist(source_id: int):
         raise HTTPException(404, str(e))
 
 
+@router.get("/discover")
+async def discover_xml():
+    """Scan default OS paths for existing Rekordbox XML files."""
+    paths = rekordbox_exporter.discover_xml_paths()
+    return {"detected_paths": paths}
+
+
 @router.get("/status", response_model=RekordboxStatus)
 async def get_status():
     return await rekordbox_exporter.get_status()

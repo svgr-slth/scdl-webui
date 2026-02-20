@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os/exec"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type App struct {
 	syncWatchCancels sync.Map
 	moveWatchCancel  context.CancelFunc
 	moveWatchMu      sync.Mutex
+	instanceListener net.Listener // TCP listener for single-instance IPC
 }
 
 // NewApp creates a new App instance.
@@ -31,6 +33,11 @@ func NewApp() *App {
 // startup is called when the app starts. It sets up the backend.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Start single-instance IPC listener now that we have the Wails context.
+	if a.instanceListener != nil {
+		a.startSingleInstanceListener(a.instanceListener)
+	}
 
 	// Always re-extract backend Python files so upgrades take effect immediately.
 	if err := extractBackendFiles(); err != nil {
@@ -133,6 +140,9 @@ func (a *App) startup(ctx context.Context) {
 // shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
 	log.Println("Shutting down...")
+	if a.instanceListener != nil {
+		a.instanceListener.Close()
+	}
 	stopBackend(a.backendCmd)
 }
 
