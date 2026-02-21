@@ -35,7 +35,12 @@ async def list_sources(db: AsyncSession = Depends(get_db)):
         )
         run = last_run.scalar_one_or_none()
         if run:
-            data.last_sync_status = run.status
+            status = run.status
+            # If the DB says "running" but no active task exists, the process
+            # was killed mid-sync. Show "interrupted" instead of "running".
+            if status == "running" and not sync_manager.is_source_syncing(s.id):
+                status = "interrupted"
+            data.last_sync_status = status
             data.last_sync_at = run.started_at
         out.append(data)
     return out
@@ -64,7 +69,10 @@ async def get_source(source_id: int, db: AsyncSession = Depends(get_db)):
     )
     run = last_run.scalar_one_or_none()
     if run:
-        data.last_sync_status = run.status
+        status = run.status
+        if status == "running" and not sync_manager.is_source_syncing(source.id):
+            status = "interrupted"
+        data.last_sync_status = status
         data.last_sync_at = run.started_at
     return data
 
