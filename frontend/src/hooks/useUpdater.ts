@@ -33,6 +33,9 @@ export function useUpdater() {
   }, []);
 
   useEffect(() => {
+    const isWails = typeof (window as any).runtime !== "undefined";
+    if (!isWails) return; // updater is Wails-only; skip in browser/dev mode
+
     GetVersion().then(setCurrentVersion).catch(() => {});
     check();
 
