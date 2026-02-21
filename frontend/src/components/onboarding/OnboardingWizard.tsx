@@ -28,10 +28,21 @@ interface WizardState {
 
 interface Props {
   defaultMusicRoot: string;
+  defaultAuthToken: string;
+  defaultAutoSyncEnabled: boolean;
+  defaultAutoSyncInterval: number;
+  defaultRekordboxXmlPath: string;
   onDone: () => void;
 }
 
-export function OnboardingWizard({ defaultMusicRoot, onDone }: Props) {
+export function OnboardingWizard({
+  defaultMusicRoot,
+  defaultAuthToken,
+  defaultAutoSyncEnabled,
+  defaultAutoSyncInterval,
+  defaultRekordboxXmlPath,
+  onDone,
+}: Props) {
   const qc = useQueryClient();
   const updateSettings = useUpdateSettings();
   const { data: rbStatus } = useRekordboxStatus();
@@ -44,11 +55,11 @@ export function OnboardingWizard({ defaultMusicRoot, onDone }: Props) {
 
   const [state, setState] = useState<WizardState>({
     musicRoot: defaultMusicRoot,
-    authToken: "",
-    autoSyncEnabled: false,
-    autoSyncInterval: 60,
+    authToken: defaultAuthToken,
+    autoSyncEnabled: defaultAutoSyncEnabled,
+    autoSyncInterval: defaultAutoSyncInterval,
     rekordboxSkipped: false,
-    rekordboxXmlPath: "",
+    rekordboxXmlPath: defaultRekordboxXmlPath,
   });
 
   // Sync detected XML path into state once rbStatus loads (only if user hasn't set a custom path)
@@ -155,10 +166,11 @@ export function OnboardingWizard({ defaultMusicRoot, onDone }: Props) {
           p="xl"
           style={{
             width: "100%",
-            maxWidth: 560,
+            maxWidth: step === "rekordbox" ? 820 : 560,
             minHeight: 480,
             display: "flex",
             flexDirection: "column",
+            transition: "max-width 300ms ease",
           }}
         >
           {/* Header: logo + progress */}

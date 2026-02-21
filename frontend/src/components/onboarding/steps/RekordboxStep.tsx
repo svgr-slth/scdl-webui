@@ -173,7 +173,7 @@ function RekordboxTutorial({ value, onChange }: { value: string; onChange: (v: s
   const [pickerOpened, setPickerOpened] = useState(false);
 
   return (
-    <Stack gap="lg">
+    <Stack gap="md">
       <Stack gap={4}>
         <Title order={3}>Configuring Rekordbox</Title>
         <Text size="sm" c="dimmed">
@@ -181,40 +181,42 @@ function RekordboxTutorial({ value, onChange }: { value: string; onChange: (v: s
         </Text>
       </Stack>
 
-      <StepCarousel />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "flex-start" }}>
+        <StepCarousel />
 
-      <Stack gap="xs">
-        {[
-          "Open Rekordbox and go to Preferences (⌘, / Ctrl+,)",
-          "Navigate to Advanced → Database",
-          'Under "rekordbox xml", paste the path shown below — this is where scdl-web will write its XML. If you already have a rekordbox XML file, click "Use custom" to point to it instead.',
-          "Close and restart Rekordbox",
-          'In Preferences → View → Layout, make sure "rekordbox xml" is checked',
-          'The "rekordbox xml" section will now appear in the left sidebar',
-        ].map((step, i) => (
-          <Group key={i} gap="sm" align="flex-start">
-            <Text
-              size="xs"
-              fw={700}
-              c="violet"
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: "50%",
-                border: "1px solid var(--mantine-color-violet-5)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                marginTop: 2,
-              }}
-            >
-              {i + 1}
-            </Text>
-            <Text size="sm" style={{ flex: 1 }}>{step}</Text>
-          </Group>
-        ))}
-      </Stack>
+        <Stack gap="xs">
+          {[
+            "Open Rekordbox and go to Preferences (⌘, / Ctrl+,)",
+            "Navigate to Advanced → Database",
+            'Under "rekordbox xml", paste the path shown below — this is where scdl-web will write its XML. If you already have a rekordbox XML file, click "Use custom" to point to it instead.',
+            "Close and restart Rekordbox",
+            'In Preferences → View → Layout, make sure "rekordbox xml" is checked',
+            'The "rekordbox xml" section will now appear in the left sidebar',
+          ].map((step, i) => (
+            <Group key={i} gap="sm" align="flex-start">
+              <Text
+                size="xs"
+                fw={700}
+                c="violet"
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  border: "1px solid var(--mantine-color-violet-5)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  marginTop: 2,
+                }}
+              >
+                {i + 1}
+              </Text>
+              <Text size="sm" style={{ flex: 1 }}>{step}</Text>
+            </Group>
+          ))}
+        </Stack>
+      </div>
 
       <Alert icon={<IconInfoCircle size={16} />} color="violet" variant="light">
         <Stack gap="xs">

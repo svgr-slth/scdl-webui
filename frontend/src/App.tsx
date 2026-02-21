@@ -18,6 +18,10 @@ export function App() {
     return (
       <OnboardingWizard
         defaultMusicRoot={settings.music_root ?? ""}
+        defaultAuthToken={settings.auth_token ?? ""}
+        defaultAutoSyncEnabled={settings.auto_sync_enabled ?? false}
+        defaultAutoSyncInterval={settings.auto_sync_interval_minutes ?? 60}
+        defaultRekordboxXmlPath={settings.rekordbox_xml_path ?? ""}
         onDone={() => setWizardDone(true)}
       />
     );
