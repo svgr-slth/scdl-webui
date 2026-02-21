@@ -288,17 +288,19 @@ class SyncManager:
                         "status": "cancelled",
                     })
             except Exception as e:
+                logger.exception("Sync failed for source %d: %s", source_id, e)
+                error_msg = str(e) or repr(e)
                 run.status = "failed"
                 run.finished_at = datetime.now(timezone.utc)
-                run.error_message = str(e)
+                run.error_message = error_msg
                 await db.commit()
                 self._live[source_id].status = "failed"
-                self._live[source_id].error = str(e)
+                self._live[source_id].error = error_msg
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "status",
                         "status": "failed",
-                        "error": str(e),
+                        "error": error_msg,
                     })
             finally:
                 self.active_tasks.pop(source_id, None)

@@ -20,15 +20,29 @@ if (-not (Test-Path $venvPython)) {
     exit 1
 }
 
-# Copy the production .env so pydantic-settings finds the real DB / music / archives paths.
+# Load the production .env and export each variable into the current process environment.
+# Also write backend/.env so uvicorn --reload workers (spawned fresh) can read it.
 if (Test-Path $appDataEnv) {
-    Write-Host "Copying .env from AppData to backend/..."
-    Copy-Item $appDataEnv (Join-Path $backendDir ".env") -Force
+    Write-Host "Loading .env from AppData..."
+    $backendEnv = Join-Path $backendDir ".env"
+    # Start with LOG_DIR so reloaded workers also get file logging.
+    "LOG_DIR=$logsDir" | Set-Content $backendEnv -Encoding UTF8
+    Get-Content $appDataEnv | ForEach-Object {
+        if ($_ -match "^([^#=][^=]*)=(.*)$") {
+            $varName = $Matches[1].Trim()
+            $varValue = $Matches[2].Trim()
+            [System.Environment]::SetEnvironmentVariable($varName, $varValue, "Process")
+            $_ | Add-Content $backendEnv -Encoding UTF8
+            Write-Host "  $varName=$varValue"
+        }
+    }
+    Write-Host "  Written backend/.env for uvicorn reload workers"
 } else {
     Write-Warning "No .env found at $appDataEnv - backend will use default paths"
 }
 
 # Start Vite dev server in a separate window.
+Write-Host ""
 Write-Host "Starting Vite dev server..."
 $viteCmd = "Set-Location '" + $frontendDir + "'; npm run dev"
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $viteCmd

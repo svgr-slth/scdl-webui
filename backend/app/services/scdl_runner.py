@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -242,29 +244,49 @@ class ScdlRunner:
         # Load existing filemap to extend during sync
         filemap = self._load_filemap(source.id)
 
-        # Merge stderr into stdout so we capture yt-dlp output on all platforms.
-        # yt-dlp writes to stderr; PYTHONUTF8=1 makes it use UTF-8 which also
-        # prevents the dual-stream encoding fallback that caused doubled lines.
-        stderr_pipe = asyncio.subprocess.STDOUT
-        # PYTHONUTF8=1 forces the scdl subprocess to output Unicode characters
-        # directly instead of ASCII \uXXXX escape sequences, so file paths
-        # captured from stdout correctly match what exists on disk.
+        # Run scdl in a thread so we work with any asyncio event loop type.
+        # asyncio.create_subprocess_exec requires ProactorEventLoop on Windows,
+        # which uvicorn --reload does not use (it uses SelectorEventLoop).
+        # subprocess.Popen in a thread works universally.
+        #
+        # PYTHONUTF8=1 forces UTF-8 output so file paths with Unicode chars are
+        # written correctly instead of \uXXXX escape sequences.
+        # Merging stderr into stdout captures yt-dlp output (which goes to stderr).
         env = {**os.environ, "PYTHONUTF8": "1"}
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=stderr_pipe,
-            env=env,
-        )
+        logger.debug("Launching scdl: %s", " ".join(str(c) for c in cmd))
+
+        loop = asyncio.get_event_loop()
+        line_queue: asyncio.Queue[str | None] = asyncio.Queue()
+        return_code_holder: list[int] = [1]
+
+        def _reader() -> None:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=env,
+            )
+            assert proc.stdout is not None
+            try:
+                for raw_line in proc.stdout:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    loop.call_soon_threadsafe(line_queue.put_nowait, line)
+            finally:
+                return_code_holder[0] = proc.wait()
+                loop.call_soon_threadsafe(line_queue.put_nowait, None)
+
+        _thread = threading.Thread(target=_reader, daemon=True)
+        _thread.start()
 
         lines: list[str] = []
         current_track_id: str | None = None
         track_id_re = re.compile(r"\[soundcloud\]\s+(\d+):")
         destination_re = re.compile(r"Destination:\s+(.+)$")
 
-        assert process.stdout is not None
-        async for raw_line in process.stdout:
-            line = raw_line.decode("utf-8", errors="replace").rstrip()
+        while True:
+            line = await line_queue.get()
+            if line is None:
+                break
             lines.append(line)
             await on_output(line)
 
@@ -290,7 +312,8 @@ class ScdlRunner:
                     if Path(dest).suffix.lower() in _AUDIO_EXTS:
                         filemap[current_track_id] = dest
 
-        return_code = await process.wait()
+        _thread.join(timeout=10)
+        return_code = return_code_holder[0]
 
         # Persist updated filemap
         self._save_filemap(source.id, filemap)
