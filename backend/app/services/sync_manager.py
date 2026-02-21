@@ -1,10 +1,13 @@
 import asyncio
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 
 from app.database import async_session
 from app.models.global_settings import GlobalSetting
@@ -184,6 +187,7 @@ class SyncManager:
 
             async def on_output(line: str):
                 nonlocal total_items, processed_items
+                logger.debug("[scdl:%d] %s", source_id, line)
                 self.log_buffers.setdefault(source_id, []).append(line)
                 self._live[source_id].logs.append(line)
                 if self._ws_manager:

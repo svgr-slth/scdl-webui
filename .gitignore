@@ -14,3 +14,7 @@ build/bin/
 
 # Dev scripts
 release.sh
+
+# Dev mode log files and copied .env
+logs/
+backend/.env

@@ -1,5 +1,9 @@
+import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +16,47 @@ from app.ws.sync_progress import ws_manager
 from app.services.auto_sync import auto_sync_scheduler
 from app.services.library_mover import library_mover
 from app.services.sync_manager import sync_manager
+
+
+def _setup_file_logging() -> None:
+    """Write all logs (server + scdl) to a rotating file when LOG_DIR is set.
+
+    Each dev session gets its own timestamped file so old sessions are kept.
+    Activate by setting the LOG_DIR environment variable before starting uvicorn.
+    Example: $env:LOG_DIR = "C:/path/to/logs"
+    """
+    log_dir_env = os.environ.get("LOG_DIR")
+    if not log_dir_env:
+        return
+
+    log_dir = Path(log_dir_env)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    session_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"scdl-web_{session_ts}.log"
+
+    handler = RotatingFileHandler(
+        log_file,
+        maxBytes=20 * 1024 * 1024,  # 20 MB per file
+        backupCount=5,
+        encoding="utf-8",
+    )
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(
+        fmt="%(asctime)s %(levelname)-8s %(name)-35s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+
+    root = logging.getLogger()
+    root.addHandler(handler)
+    # Don't lower root level below what uvicorn already set.
+    if root.level == logging.NOTSET or root.level > logging.DEBUG:
+        root.setLevel(logging.DEBUG)
+
+    logging.getLogger(__name__).info("File logging active: %s", log_file.resolve())
+
+
+_setup_file_logging()
 
 
 async def _cleanup_stale_runs() -> None:
