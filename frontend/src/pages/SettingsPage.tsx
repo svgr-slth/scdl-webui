@@ -14,7 +14,7 @@ import {
   Switch,
   NumberInput,
 } from "@mantine/core";
-import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl } from "@tabler/icons-react";
+import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl, IconWand } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { useRekordboxStatus } from "../hooks/useRekordbox";
 import { settingsApi, type MoveCheckResult } from "../api/settings";
@@ -469,6 +469,28 @@ export function SettingsPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {/* Setup wizard relaunch */}
+      <Card withBorder p="lg" maw={600} mt="md">
+        <Group justify="space-between" align="center">
+          <Stack gap={2}>
+            <Text fw={500} size="sm">Setup wizard</Text>
+            <Text size="xs" c="dimmed">
+              Re-run the initial setup to reconfigure music folder, auth token, and Rekordbox.
+            </Text>
+          </Stack>
+          <Button
+            variant="light"
+            leftSection={<IconWand size={16} />}
+            onClick={() =>
+              updateSettings.mutate({ onboarding_complete: false })
+            }
+            loading={updateSettings.isPending}
+          >
+            Relaunch wizard
+          </Button>
+        </Group>
+      </Card>
     </>
   );
 }

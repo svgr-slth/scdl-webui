@@ -7,6 +7,7 @@ export interface Settings {
   auto_sync_interval_minutes: number;
   max_concurrent_syncs: number;
   rekordbox_xml_path: string | null;
+  onboarding_complete: boolean;
 }
 
 export type SettingsUpdate = Partial<Settings>;
