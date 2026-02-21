@@ -59,14 +59,3 @@ async def cancel_sync(source_id: int):
     if not cancelled:
         raise HTTPException(404, "No active sync for this source")
     return {"status": "cancelled"}
-
-
-@router.post("/{source_id}/reset-archive")
-async def reset_archive(source_id: int, db: AsyncSession = Depends(get_db)):
-    source = await db.get(Source, source_id)
-    if not source:
-        raise HTTPException(404, "Source not found")
-    if sync_manager.is_source_syncing(source_id):
-        raise HTTPException(409, "Cannot reset archive while sync is running")
-    sync_manager.runner.reset_archive(source_id)
-    return {"status": "reset", "source_id": source_id}

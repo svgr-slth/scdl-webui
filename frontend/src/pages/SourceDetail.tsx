@@ -1,8 +1,8 @@
-import { Title, Button, Group, Stack, Card, Alert, Box, Collapse, Modal, Text, Progress, Badge } from "@mantine/core";
+import { Title, Button, Group, Stack, Card, Alert, Box, Collapse, Text, Progress, Badge } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { IconPlayerPlay, IconArrowLeft, IconRefresh, IconFolder, IconChevronDown } from "@tabler/icons-react";
+import { IconPlayerPlay, IconArrowLeft, IconFolder, IconChevronDown } from "@tabler/icons-react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSource, useUpdateSource, useResetArchive, useOpenFolder, useTracks, useDeleteTrack } from "../hooks/useSources";
+import { useSource, useUpdateSource, useOpenFolder, useTracks, useDeleteTrack } from "../hooks/useSources";
 import { SourceForm } from "../components/SourceForm";
 import { RekordboxActions } from "../components/RekordboxActions";
 import { TrackList } from "../components/TrackList";
@@ -20,7 +20,6 @@ export function SourceDetail() {
   const { data: source, isLoading } = useSource(sourceId);
   const { data: tracks } = useTracks(sourceId);
   const updateSource = useUpdateSource();
-  const resetArchive = useResetArchive();
   const openFolder = useOpenFolder();
   const deleteTrack = useDeleteTrack();
   const qc = useQueryClient();
@@ -28,7 +27,6 @@ export function SourceDetail() {
   const [pendingSync, setPendingSync] = useState(false);
   const [syncKey, setSyncKey] = useState(0);
   const [checkedInitial, setCheckedInitial] = useState(false);
-  const [resetConfirmOpened, setResetConfirmOpened] = useState(false);
   const [settingsOpened, { toggle: toggleSettings }] = useDisclosure(false);
 
   // On mount, check if this source is already syncing/queued
@@ -153,24 +151,13 @@ export function SourceDetail() {
               <Badge color="grape" size="sm">queued</Badge>
             )}
           </Group>
-          <Group gap="xs">
-            <Button
-              variant="light"
-              color="orange"
-              leftSection={<IconRefresh size={16} />}
-              onClick={() => setResetConfirmOpened(true)}
-              disabled={syncActive}
-            >
-              Reset Archive
-            </Button>
-            <Button
-              leftSection={<IconPlayerPlay size={16} />}
-              onClick={handleSync}
-              loading={syncActive}
-            >
-              Sync Now
-            </Button>
-          </Group>
+          <Button
+            leftSection={<IconPlayerPlay size={16} />}
+            onClick={handleSync}
+            loading={syncActive}
+          >
+            Sync Now
+          </Button>
         </Group>
         {isSyncing && (
           <>
@@ -213,34 +200,6 @@ export function SourceDetail() {
         )}
       </Card>
 
-      <Modal
-        opened={resetConfirmOpened}
-        onClose={() => setResetConfirmOpened(false)}
-        title="Reset Archive"
-        size="sm"
-      >
-        <Stack gap="md">
-          <Text>
-            This will wipe the download archive for <strong>{source.name}</strong>.
-            The next sync will re-download all tracks. Existing files will not be deleted.
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setResetConfirmOpened(false)}>
-              Cancel
-            </Button>
-            <Button
-              color="orange"
-              loading={resetArchive.isPending}
-              onClick={async () => {
-                await resetArchive.mutateAsync(sourceId);
-                setResetConfirmOpened(false);
-              }}
-            >
-              Reset
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </Stack>
   );
 }

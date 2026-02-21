@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { sourcesApi } from "../api/sources";
-import { syncApi } from "../api/sync";
 import type { SourceCreate, SourceUpdate } from "../types/source";
 
 export function useSources() {
@@ -46,14 +45,6 @@ export function useOpenFolder() {
         window.alert(`Folder path copied to clipboard:\n${data.path}`);
       }
     },
-  });
-}
-
-export function useResetArchive() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (sourceId: number) => syncApi.resetArchive(sourceId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["sources"] }),
   });
 }
 

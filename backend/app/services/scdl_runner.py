@@ -173,17 +173,6 @@ class ScdlRunner:
                 path.unlink()
                 logger.info("Deleted %s", path)
 
-    def reset_archive(self, source_id: int) -> None:
-        """Wipe archive, sync, and filemap to force full re-download on next sync."""
-        for path in [
-            self._archive_path(source_id),
-            self._sync_file_path(source_id),
-            self._filemap_path(source_id),
-        ]:
-            if path.exists():
-                path.unlink()
-                logger.info("Reset: deleted %s", path)
-
     # ── Command building ─────────────────────────────────────────
 
     def build_command(self, source: Source, auth_token: str | None = None) -> list[str]:

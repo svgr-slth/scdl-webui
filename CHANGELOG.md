@@ -7,6 +7,9 @@ All notable changes to scdl-web are documented here.
 ### Added
 - **Duplicate source detection**: creating a source with the same URL and type as an existing one shows a yellow warning with a "Create anyway" option; creating an exact duplicate (same URL, type, and target folder) is blocked with a red error
 
+### Removed
+- **Reset Archive** button and backend endpoint: redundant since `prepare_sync_files()` already detects missing files before every sync and removes them from the archive, causing scdl to re-download them automatically
+
 ## [3.19.0] - 2026-02-21
 
 ### Fixed
