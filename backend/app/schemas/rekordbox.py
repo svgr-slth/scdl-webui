@@ -4,9 +4,10 @@ from pydantic import BaseModel
 class RekordboxExportResult(BaseModel):
     tracks_added: int
     tracks_skipped: int
+    playlist_updated: int
     xml_path: str
-    playlist_name: str | None = None
-    playlist_tracks: int | None = None
+    playlist_name: str
+    is_rekordbox_running: bool
 
 
 class RekordboxStatus(BaseModel):

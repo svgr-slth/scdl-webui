@@ -100,7 +100,7 @@ export function SourceCard({ source, onSync, onDelete, progress, syncStatus }: P
                 <IconFolder size={16} />
               </ActionIcon>
             </Tooltip>
-            <RekordboxActions sourceId={source.id} variant="menu" disabled={isActive} />
+            <RekordboxActions sourceId={source.id} disabled={isActive} />
             <Tooltip label="Delete">
               <ActionIcon variant="subtle" color="red" onClick={() => onDelete(source.id, source.name)}>
                 <IconTrash size={16} />

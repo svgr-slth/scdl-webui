@@ -8,14 +8,8 @@ export function useRekordboxStatus() {
   });
 }
 
-export function useExportToCollection() {
+export function useExportToRekordbox() {
   return useMutation({
-    mutationFn: (sourceId: number) => rekordboxApi.exportToCollection(sourceId),
-  });
-}
-
-export function useExportAsPlaylist() {
-  return useMutation({
-    mutationFn: (sourceId: number) => rekordboxApi.exportAsPlaylist(sourceId),
+    mutationFn: (sourceId: number) => rekordboxApi.export(sourceId),
   });
 }

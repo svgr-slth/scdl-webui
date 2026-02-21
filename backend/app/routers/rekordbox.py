@@ -6,18 +6,11 @@ from app.services import rekordbox_exporter
 router = APIRouter(prefix="/api/rekordbox", tags=["rekordbox"])
 
 
-@router.post("/{source_id}/collection", response_model=RekordboxExportResult)
-async def export_to_collection(source_id: int):
+@router.post("/{source_id}/export", response_model=RekordboxExportResult)
+async def export_source(source_id: int):
+    """Export all audio files from a source to Rekordbox as a playlist."""
     try:
-        return await rekordbox_exporter.export_to_collection(source_id)
-    except FileNotFoundError as e:
-        raise HTTPException(404, str(e))
-
-
-@router.post("/{source_id}/playlist", response_model=RekordboxExportResult)
-async def export_as_playlist(source_id: int):
-    try:
-        return await rekordbox_exporter.export_as_playlist(source_id)
+        return await rekordbox_exporter.export_source(source_id)
     except FileNotFoundError as e:
         raise HTTPException(404, str(e))
 

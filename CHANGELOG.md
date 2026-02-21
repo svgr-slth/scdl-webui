@@ -4,11 +4,22 @@ All notable changes to scdl-web are documented here.
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-02-21
+
 ### Added
 - **Duplicate source detection**: creating a source with the same URL and type as an existing one shows a yellow warning with a "Create anyway" option; creating an exact duplicate (same URL, type, and target folder) is blocked with a red error
 
 ### Removed
 - **Reset Archive** button and backend endpoint: redundant since `prepare_sync_files()` already detects missing files before every sync and removes them from the archive, causing scdl to re-download them automatically
+
+### Changed
+- **Rekordbox integration redesigned**:
+  - Single "Export to Rekordbox" button — no more "Add to Collection" vs "Add as Playlist" split
+  - Exports always create/update a playlist named after the source
+  - Non-destructive: existing playlist entries are preserved; only newly synced tracks are appended
+  - ID3 metadata (artist, title, album, BPM, genre) populated automatically via mutagen
+  - Auto-detects the Rekordbox XML path on first export — no manual Settings step required
+  - Result feedback shows whether Rekordbox is currently open (changes require a relaunch to appear)
 
 ## [3.19.0] - 2026-02-21
 
