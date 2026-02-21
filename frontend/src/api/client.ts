@@ -11,7 +11,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || res.statusText);
+    const message =
+      typeof error.detail === "string" ? error.detail : (error.detail?.message ?? res.statusText);
+    const err = new Error(message) as Error & { detail: unknown };
+    err.detail = error.detail;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return res.json();

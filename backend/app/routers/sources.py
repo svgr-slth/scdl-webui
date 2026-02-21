@@ -47,7 +47,55 @@ async def list_sources(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=SourceRead, status_code=201)
-async def create_source(payload: SourceCreate, db: AsyncSession = Depends(get_db)):
+async def create_source(
+    payload: SourceCreate,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    # Block exact duplicates (same URL + type + folder) regardless of force.
+    exact = await db.execute(
+        select(Source).where(
+            Source.url == payload.url,
+            Source.source_type == payload.source_type,
+            Source.local_folder == payload.local_folder,
+        )
+    )
+    if exact.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "type": "exact_duplicate",
+                "message": "Une source identique existe déjà avec la même URL, le même type et le même dossier cible.",
+            },
+        )
+
+    # Warn on partial duplicates (same URL + type, different folder) unless force=true.
+    if not force:
+        partial = await db.execute(
+            select(Source).where(
+                Source.url == payload.url,
+                Source.source_type == payload.source_type,
+            )
+        )
+        conflicts = partial.scalars().all()
+        if conflicts:
+            names = ", ".join(f'"{c.name}"' for c in conflicts)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "type": "partial_duplicate",
+                    "message": (
+                        f"Cette URL est déjà utilisée par {names} "
+                        f"(dossier\u00a0: {conflicts[0].local_folder}). "
+                        "Voulez-vous quand même créer une nouvelle source ?"
+                    ),
+                    "conflicts": [
+                        {"id": c.id, "name": c.name, "local_folder": c.local_folder}
+                        for c in conflicts
+                    ],
+                },
+            )
+
     source = Source(**payload.model_dump())
     db.add(source)
     await db.commit()

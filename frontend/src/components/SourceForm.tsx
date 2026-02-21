@@ -1,4 +1,5 @@
-import { Badge, Button, Checkbox, Group, Select, Stack, TextInput, Anchor } from "@mantine/core";
+import { Alert, Anchor, Badge, Button, Checkbox, Group, Select, Stack, Text, TextInput } from "@mantine/core";
+import { IconAlertCircle, IconAlertTriangle } from "@tabler/icons-react";
 import { useState, useRef } from "react";
 import type { SourceCreate } from "../types/source";
 
@@ -40,14 +41,22 @@ function parseScUrl(raw: string): { user: string; slug: string; detected: Detect
   return { user: "", slug: "", detected: null };
 }
 
+interface DuplicateWarning {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
 interface Props {
   initial?: Partial<SourceCreate>;
   onSubmit: (data: SourceCreate) => void;
   loading?: boolean;
   submitLabel?: string;
+  error?: string | null;
+  warning?: DuplicateWarning | null;
 }
 
-export function SourceForm({ initial, onSubmit, loading, submitLabel = "Create" }: Props) {
+export function SourceForm({ initial, onSubmit, loading, submitLabel = "Create", error, warning }: Props) {
   const isEditing = !!initial?.url;
   const [name, setName] = useState(initial?.name ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
@@ -154,7 +163,27 @@ export function SourceForm({ initial, onSubmit, loading, submitLabel = "Create" 
           <Checkbox label="Original Art" checked={originalArt} onChange={(e) => setOriginalArt(e.currentTarget.checked)} />
           <Checkbox label="Extract Artist" checked={extractArtist} onChange={(e) => setExtractArtist(e.currentTarget.checked)} />
         </Group>
-        <Button type="submit" loading={loading}>{submitLabel}</Button>
+        {error && (
+          <Alert color="red" icon={<IconAlertCircle size={16} />}>
+            {error}
+          </Alert>
+        )}
+        {warning && (
+          <Alert color="yellow" icon={<IconAlertTriangle size={16} />} title="Source similaire détectée">
+            <Text size="sm" mb="xs">{warning.message}</Text>
+            <Group gap="xs">
+              <Button size="xs" color="yellow" loading={loading} onClick={warning.onConfirm}>
+                Créer quand même
+              </Button>
+              <Button size="xs" variant="default" onClick={warning.onCancel}>
+                Annuler
+              </Button>
+            </Group>
+          </Alert>
+        )}
+        {!warning && (
+          <Button type="submit" loading={loading}>{submitLabel}</Button>
+        )}
       </Stack>
     </form>
   );

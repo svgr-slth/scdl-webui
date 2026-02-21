@@ -19,6 +19,8 @@ export function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [syncSources, setSyncSources] = useState<Record<number, "running" | "queued">>({});
   const [addOpened, setAddOpened] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [pendingCreate, setPendingCreate] = useState<{ data: SourceCreate; warning: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
   const [deleteFiles, setDeleteFiles] = useState(false);
   const prevHadSyncing = useRef(false);
@@ -76,9 +78,28 @@ export function Dashboard() {
     }
   };
 
-  const handleCreate = async (data: SourceCreate) => {
-    await createSource.mutateAsync(data);
+  const closeAddModal = () => {
     setAddOpened(false);
+    setCreateError(null);
+    setPendingCreate(null);
+  };
+
+  const handleCreate = async (data: SourceCreate, force = false) => {
+    setCreateError(null);
+    setPendingCreate(null);
+    try {
+      await createSource.mutateAsync({ data, force });
+      closeAddModal();
+    } catch (err: unknown) {
+      const detail = (err as { detail?: { type?: string; message?: string } }).detail;
+      if (detail?.type === "partial_duplicate") {
+        setPendingCreate({ data, warning: detail.message ?? "Source similaire détectée." });
+      } else if (detail?.type === "exact_duplicate") {
+        setCreateError(detail.message ?? "Source identique déjà existante.");
+      } else {
+        setCreateError((err as Error).message ?? "Erreur lors de la création.");
+      }
+    }
   };
 
   const handleDelete = useCallback((id: number, name: string) => {
@@ -129,8 +150,21 @@ export function Dashboard() {
         </SimpleGrid>
       )}
 
-      <Modal opened={addOpened} onClose={() => setAddOpened(false)} title="Add Source" size="lg">
-        <SourceForm onSubmit={handleCreate} loading={createSource.isPending} />
+      <Modal opened={addOpened} onClose={closeAddModal} title="Add Source" size="lg">
+        <SourceForm
+          onSubmit={handleCreate}
+          loading={createSource.isPending}
+          error={createError}
+          warning={
+            pendingCreate
+              ? {
+                  message: pendingCreate.warning,
+                  onConfirm: () => handleCreate(pendingCreate.data, true),
+                  onCancel: () => setPendingCreate(null),
+                }
+              : null
+          }
+        />
       </Modal>
 
       <Modal

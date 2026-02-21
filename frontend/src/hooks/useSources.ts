@@ -14,7 +14,8 @@ export function useSource(id: number) {
 export function useCreateSource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: SourceCreate) => sourcesApi.create(data),
+    mutationFn: ({ data, force = false }: { data: SourceCreate; force?: boolean }) =>
+      sourcesApi.create(data, force),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sources"] }),
   });
 }
