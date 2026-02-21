@@ -7,8 +7,8 @@ router = APIRouter(prefix="/api/filesystem", tags=["filesystem"])
 
 
 @router.get("/browse")
-async def browse_directory(path: str = Query("/")):
-    """List directories at the given path for the folder picker."""
+async def browse_directory(path: str = Query("/"), file_glob: str | None = Query(None)):
+    """List directories (and optionally files) at the given path for the picker."""
     target = Path(path).expanduser()
 
     if not target.is_absolute():
@@ -19,6 +19,7 @@ async def browse_directory(path: str = Query("/")):
         raise HTTPException(400, f"Path is not a directory: {path}")
 
     dirs: list[dict] = []
+    files: list[dict] = []
     try:
         for entry in sorted(target.iterdir()):
             if entry.name.startswith("."):
@@ -30,6 +31,8 @@ async def browse_directory(path: str = Query("/")):
                     dirs.append({"name": entry.name, "path": str(entry)})
                 except PermissionError:
                     pass
+            elif file_glob and entry.is_file() and entry.match(file_glob):
+                files.append({"name": entry.name, "path": str(entry)})
     except PermissionError:
         raise HTTPException(403, f"Permission denied: {path}")
 
@@ -39,4 +42,5 @@ async def browse_directory(path: str = Query("/")):
         "current": str(target),
         "parent": parent,
         "directories": dirs,
+        "files": files,
     }

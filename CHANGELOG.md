@@ -4,6 +4,18 @@ All notable changes to scdl-web are documented here.
 
 ## [Unreleased]
 
+## [3.21.0] - 2026-02-21
+
+### Added
+- **Onboarding wizard**: step-by-step first-launch setup covering music root, SoundCloud auth token, auto-sync, and Rekordbox integration; wizard can be relaunched from Settings at any time
+- **Rekordbox tutorial carousel**: interactive slideshow with annotated screenshots guiding users through the Rekordbox XML configuration steps
+- **File picker for Rekordbox XML path**: the browser now lists matching XML files in addition to folders, allowing direct selection of an existing rekordbox XML file; available in both the onboarding wizard and Settings
+- **Copy button for Rekordbox XML path**: one-click copy of the configured XML path in both the wizard and the Settings page
+
+### Changed
+- Rekordbox XML path saved automatically when completing or skipping the onboarding wizard
+- File browser (`/api/filesystem/browse`) accepts an optional `file_glob` parameter to return matching files alongside directories
+
 ## [3.20.0] - 2026-02-21
 
 ### Added

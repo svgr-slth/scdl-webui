@@ -2,40 +2,93 @@ import {
   Stack,
   Title,
   Text,
-  TextInput,
   Button,
   Group,
   ThemeIcon,
-  Paper,
   Badge,
   Alert,
+  CopyButton,
+  TextInput,
 } from "@mantine/core";
 import {
   IconVinyl,
-  IconFolder,
   IconSettings,
   IconInfoCircle,
   IconArrowRight,
+  IconCopy,
+  IconCheck,
+  IconFolder,
 } from "@tabler/icons-react";
 import { useState } from "react";
+
+const RB_STEPS = [
+  { src: "/rekordbox-steps/step-1.png", caption: "File → Preferences" },
+  { src: "/rekordbox-steps/step-2.png", caption: "Advanced → Database → rekordbox xml" },
+  { src: "/rekordbox-steps/step-3.png", caption: "View → Layout → check rekordbox xml" },
+];
+
+function StepCarousel() {
+  const [idx, setIdx] = useState(0);
+  const slide = RB_STEPS[idx];
+  return (
+    <div style={{ position: "relative", userSelect: "none" }}>
+      <img
+        src={slide.src}
+        alt={slide.caption}
+        style={{ width: "100%", borderRadius: 8, display: "block", border: "1px solid var(--mantine-color-dark-4)" }}
+      />
+      {/* Caption */}
+      <div style={{
+        position: "absolute", bottom: 32, left: 0, right: 0,
+        textAlign: "center", padding: "4px 8px",
+        background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: 11,
+      }}>
+        {slide.caption}
+      </div>
+      {/* Prev */}
+      {idx > 0 && (
+        <button onClick={() => setIdx(idx - 1)} style={{
+          position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)",
+          background: "rgba(0,0,0,0.45)", border: "none", borderRadius: 4,
+          color: "#fff", cursor: "pointer", padding: "4px 8px", fontSize: 16,
+        }}>‹</button>
+      )}
+      {/* Next */}
+      {idx < RB_STEPS.length - 1 && (
+        <button onClick={() => setIdx(idx + 1)} style={{
+          position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+          background: "rgba(0,0,0,0.45)", border: "none", borderRadius: 4,
+          color: "#fff", cursor: "pointer", padding: "4px 8px", fontSize: 16,
+        }}>›</button>
+      )}
+      {/* Dots */}
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 8 }}>
+        {RB_STEPS.map((_, i) => (
+          <div key={i} onClick={() => setIdx(i)} style={{
+            width: i === idx ? 18 : 7, height: 7, borderRadius: 4,
+            background: i === idx ? "var(--mantine-color-violet-5)" : "var(--mantine-color-dark-4)",
+            cursor: "pointer", transition: "all 250ms ease",
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
 import { FolderPicker } from "../../FolderPicker";
 
 interface Props {
   value: string;
   onChange: (v: string) => void;
-  detectedPath: string | null;
   subStep: number;
   onSubStepChange: (s: number) => void;
 }
 
-export function RekordboxStep({ value, onChange, detectedPath, subStep, onSubStepChange }: Props) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-
+export function RekordboxStep({ value, onChange, subStep, onSubStepChange }: Props) {
   return (
     <>
       {/* Sub-step mini progress */}
       <Group gap="xs" mb="lg" justify="center">
-        {[0, 1, 2].map((i) => (
+        {[0, 1].map((i) => (
           <div
             key={i}
             style={{
@@ -53,22 +106,7 @@ export function RekordboxStep({ value, onChange, detectedPath, subStep, onSubSte
       </Group>
 
       {subStep === 0 && <RekordboxIntro onNext={() => onSubStepChange(1)} />}
-      {subStep === 1 && <RekordboxTutorial onNext={() => onSubStepChange(2)} />}
-      {subStep === 2 && (
-        <RekordboxPath
-          value={value}
-          onChange={onChange}
-          detectedPath={detectedPath}
-          onPickerOpen={() => setPickerOpen(true)}
-        />
-      )}
-
-      <FolderPicker
-        opened={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={onChange}
-        initialPath={value || undefined}
-      />
+      {subStep === 1 && <RekordboxTutorial value={value} onChange={onChange} />}
     </>
   );
 }
@@ -131,7 +169,9 @@ function RekordboxIntro({ onNext }: { onNext: () => void }) {
   );
 }
 
-function RekordboxTutorial({ onNext }: { onNext: () => void }) {
+function RekordboxTutorial({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [pickerOpened, setPickerOpened] = useState(false);
+
   return (
     <Stack gap="lg">
       <Stack gap={4}>
@@ -141,31 +181,15 @@ function RekordboxTutorial({ onNext }: { onNext: () => void }) {
         </Text>
       </Stack>
 
-      {/* GIF placeholder */}
-      <Paper
-        withBorder
-        radius="md"
-        style={{
-          aspectRatio: "16/9",
-          background: "var(--mantine-color-dark-6)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          border: "2px dashed var(--mantine-color-dark-4)",
-        }}
-      >
-        <Stack align="center" gap="xs">
-          <IconVinyl size={32} color="var(--mantine-color-dark-3)" />
-          <Text size="xs" c="dimmed">Tutorial GIF — coming soon</Text>
-        </Stack>
-      </Paper>
+      <StepCarousel />
 
       <Stack gap="xs">
         {[
           "Open Rekordbox and go to Preferences (⌘, / Ctrl+,)",
-          'Navigate to Advanced → Database',
-          'Under "rekordbox xml", set the path to the XML file scdl-web will create',
-          "Click OK and restart Rekordbox",
+          "Navigate to Advanced → Database",
+          'Under "rekordbox xml", paste the path shown below — this is where scdl-web will write its XML. If you already have a rekordbox XML file, click "Use custom" to point to it instead.',
+          "Close and restart Rekordbox",
+          'In Preferences → View → Layout, make sure "rekordbox xml" is checked',
           'The "rekordbox xml" section will now appear in the left sidebar',
         ].map((step, i) => (
           <Group key={i} gap="sm" align="flex-start">
@@ -187,70 +211,66 @@ function RekordboxTutorial({ onNext }: { onNext: () => void }) {
             >
               {i + 1}
             </Text>
-            <Text size="sm">{step}</Text>
+            <Text size="sm" style={{ flex: 1 }}>{step}</Text>
           </Group>
         ))}
       </Stack>
 
-      <Button variant="light" color="violet" rightSection={<IconArrowRight size={16} />} onClick={onNext}>
-        Set the XML path
-      </Button>
-    </Stack>
-  );
-}
-
-function RekordboxPath({
-  value,
-  onChange,
-  detectedPath,
-  onPickerOpen,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  detectedPath: string | null;
-  onPickerOpen: () => void;
-}) {
-  return (
-    <Stack gap="lg">
-      <Stack gap={4}>
-        <Title order={3}>XML file path</Title>
-        <Text size="sm" c="dimmed">
-          This is where scdl-web will write the Rekordbox XML file. Point Rekordbox at this same path.
-        </Text>
-      </Stack>
-
-      {detectedPath && !value && (
-        <Alert icon={<IconInfoCircle size={16} />} color="violet" variant="light">
-          <Stack gap="xs">
-            <Text size="sm">We detected an existing Rekordbox XML at:</Text>
-            <Text size="xs" ff="monospace" c="violet.3">
-              {detectedPath}
-            </Text>
+      <Alert icon={<IconInfoCircle size={16} />} color="violet" variant="light">
+        <Stack gap="xs">
+          <Group gap="xs" wrap="nowrap" align="flex-end">
+            <TextInput
+              flex={1}
+              size="xs"
+              readOnly
+              value={value}
+              placeholder="No path configured — click 'Use custom' to set one"
+              styles={{ input: { fontFamily: "monospace", fontSize: 11 } }}
+            />
+            <CopyButton value={value} timeout={2000}>
+              {({ copied, copy }) => (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color={copied ? "teal" : "violet"}
+                  leftSection={copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                  onClick={copy}
+                  disabled={!value}
+                  style={{ flexShrink: 0 }}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              )}
+            </CopyButton>
             <Button
               size="xs"
               variant="light"
               color="violet"
-              onClick={() => onChange(detectedPath)}
+              leftSection={<IconFolder size={14} />}
+              onClick={() => setPickerOpened(true)}
+              style={{ flexShrink: 0 }}
             >
-              Use this path
+              Use custom
             </Button>
-          </Stack>
-        </Alert>
-      )}
+          </Group>
+        </Stack>
+      </Alert>
 
-      <Group gap="xs" align="flex-end">
-        <TextInput
-          flex={1}
-          label="XML path"
-          placeholder="C:\Users\...\rekordbox.xml"
-          value={value}
-          onChange={(e) => onChange(e.currentTarget.value)}
-          description="Leave empty to use the default location inside the app data folder"
-        />
-        <Button variant="light" leftSection={<IconFolder size={16} />} onClick={onPickerOpen}>
-          Browse
-        </Button>
-      </Group>
+      <FolderPicker
+        opened={pickerOpened}
+        onClose={() => setPickerOpened(false)}
+        fileFilter="*.xml"
+        onSelect={(selected) => {
+          // If user clicked a file, use it directly; if they clicked "Use this folder", append filename
+          if (selected.toLowerCase().endsWith(".xml")) {
+            onChange(selected);
+          } else {
+            const sep = selected.includes("\\") ? "\\" : "/";
+            onChange(selected.replace(/[\\/]$/, "") + sep + "rekordbox.xml");
+          }
+        }}
+        initialPath={value ? value.replace(/[\\/][^\\/]*$/, "") || "/" : "/"}
+      />
     </Stack>
   );
 }

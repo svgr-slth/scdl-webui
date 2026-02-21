@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
@@ -9,10 +10,17 @@ import { useSettings } from "./hooks/useSettings";
 
 export function App() {
   const { data: settings, isLoading } = useSettings();
+  // Local flag set immediately when the wizard finishes — avoids any race
+  // between React Query cache updates and re-renders.
+  const [wizardDone, setWizardDone] = useState(false);
 
-  // Show wizard on first launch — wait for settings to load, then check flag
-  if (!isLoading && settings && !settings.onboarding_complete) {
-    return <OnboardingWizard defaultMusicRoot={settings.music_root ?? ""} />;
+  if (!isLoading && settings && !settings.onboarding_complete && !wizardDone) {
+    return (
+      <OnboardingWizard
+        defaultMusicRoot={settings.music_root ?? ""}
+        onDone={() => setWizardDone(true)}
+      />
+    );
   }
 
   return (

@@ -1,6 +1,7 @@
 import { Box, Card, Group, Button, Text, Stack } from "@mantine/core";
 import { IconArrowLeft, IconArrowRight, IconCheck, IconPlayerSkipForward } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useUpdateSettings } from "../../hooks/useSettings";
 import { useRekordboxStatus } from "../../hooks/useRekordbox";
 import { WelcomeStep } from "./steps/WelcomeStep";
@@ -21,15 +22,17 @@ interface WizardState {
   authToken: string;
   autoSyncEnabled: boolean;
   autoSyncInterval: number;
-  rekordboxXmlPath: string;
   rekordboxSkipped: boolean;
+  rekordboxXmlPath: string;
 }
 
 interface Props {
   defaultMusicRoot: string;
+  onDone: () => void;
 }
 
-export function OnboardingWizard({ defaultMusicRoot }: Props) {
+export function OnboardingWizard({ defaultMusicRoot, onDone }: Props) {
+  const qc = useQueryClient();
   const updateSettings = useUpdateSettings();
   const { data: rbStatus } = useRekordboxStatus();
 
@@ -44,9 +47,16 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
     authToken: "",
     autoSyncEnabled: false,
     autoSyncInterval: 60,
-    rekordboxXmlPath: "",
     rekordboxSkipped: false,
+    rekordboxXmlPath: "",
   });
+
+  // Sync detected XML path into state once rbStatus loads (only if user hasn't set a custom path)
+  useEffect(() => {
+    if (rbStatus?.xml_path) {
+      setState((s) => s.rekordboxXmlPath ? s : { ...s, rekordboxXmlPath: rbStatus!.xml_path! });
+    }
+  }, [rbStatus?.xml_path]);
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -71,7 +81,7 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
   };
 
   const handleRekordboxNext = () => {
-    if (rekordboxSubStep < 2) {
+    if (rekordboxSubStep < 1) {
       setRekordboxSubStep((s) => s + 1);
     } else {
       goTo("done", "next");
@@ -79,21 +89,29 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
   };
 
   const handleSkipRekordbox = () => {
-    setState((s) => ({ ...s, rekordboxSkipped: true, rekordboxXmlPath: "" }));
+    setState((s) => ({ ...s, rekordboxSkipped: true }));
     goTo("done", "next");
   };
 
   const handleFinish = async () => {
     setFinishing(true);
     try {
-      await updateSettings.mutateAsync({
+      const newSettings = await updateSettings.mutateAsync({
         music_root: state.musicRoot || undefined,
         auth_token: state.authToken || undefined,
         auto_sync_enabled: state.autoSyncEnabled,
         auto_sync_interval_minutes: state.autoSyncInterval,
-        rekordbox_xml_path: state.rekordboxSkipped ? undefined : state.rekordboxXmlPath || undefined,
+        rekordbox_xml_path: state.rekordboxSkipped ? undefined : (state.rekordboxXmlPath || undefined),
         onboarding_complete: true,
       });
+      // Update cache so the dashboard (and Settings page) reflect the new
+      // values immediately, then unmount via the parent callback — this
+      // bypasses any React Query cache timing issues entirely.
+      await qc.cancelQueries({ queryKey: ["settings"] });
+      qc.setQueryData(["settings"], newSettings);
+      onDone();
+    } catch (err) {
+      console.error("[wizard] handleFinish error:", err);
     } finally {
       setFinishing(false);
     }
@@ -104,10 +122,6 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
       ? "slideInRight 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both"
       : "slideInLeft 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both";
 
-  const detectedRbPath =
-    rbStatus?.detected_paths && rbStatus.detected_paths.length > 0
-      ? rbStatus.detected_paths[0]
-      : null;
 
   return (
     <>
@@ -212,7 +226,6 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
               <RekordboxStep
                 value={state.rekordboxXmlPath}
                 onChange={(v) => setState((s) => ({ ...s, rekordboxXmlPath: v }))}
-                detectedPath={detectedRbPath}
                 subStep={rekordboxSubStep}
                 onSubStepChange={setRekordboxSubStep}
               />
@@ -278,10 +291,10 @@ export function OnboardingWizard({ defaultMusicRoot }: Props) {
 
               {step === "rekordbox" && (
                 <Button
-                  rightSection={rekordboxSubStep < 2 ? <IconArrowRight size={16} /> : <IconCheck size={16} />}
+                  rightSection={rekordboxSubStep < 1 ? <IconArrowRight size={16} /> : <IconCheck size={16} />}
                   onClick={handleRekordboxNext}
                 >
-                  {rekordboxSubStep < 2 ? "Next" : "Done"}
+                  {rekordboxSubStep < 1 ? "Next" : "Done"}
                 </Button>
               )}
 

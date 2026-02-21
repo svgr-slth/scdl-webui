@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,7 @@ from app.services.library_mover import library_mover
 from app.services.sync_manager import sync_manager
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+logger = logging.getLogger(__name__)
 
 SETTING_KEYS = [
     "auth_token", "default_audio_format", "default_name_format", "music_root",
@@ -53,7 +55,9 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
 
 @router.put("", response_model=SettingsRead)
 async def update_settings(payload: SettingsUpdate, db: AsyncSession = Depends(get_db)):
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    dumped = payload.model_dump(exclude_unset=True)
+    logger.info("[settings PUT] payload keys: %s", list(dumped.keys()))
+    for key, value in dumped.items():
         # GlobalSetting stores strings — convert bool/int
         if isinstance(value, bool):
             db_value = "true" if value else "false"
@@ -70,6 +74,7 @@ async def update_settings(payload: SettingsUpdate, db: AsyncSession = Depends(ge
 
     settings = await _get_all_settings(db)
     result = _build_settings_read(settings)
+    logger.info("[settings PUT] result.onboarding_complete=%s", result.onboarding_complete)
 
     # Notify scheduler if auto-sync settings were touched
     updated_keys = set(payload.model_dump(exclude_unset=True).keys())
