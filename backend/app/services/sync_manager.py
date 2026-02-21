@@ -138,13 +138,16 @@ class SyncManager:
             # Handle cancellation while queued (before semaphore acquired)
             if source_id in self.queued_sources:
                 self.queued_sources.remove(source_id)
-            self.active_tasks.pop(source_id, None)
-            self.log_buffers.pop(source_id, None)
             if self._ws_manager:
                 await self._ws_manager.broadcast(source_id, {
                     "type": "status",
                     "status": "cancelled",
                 })
+        finally:
+            # Safety net: always remove from active_tasks so the source is
+            # never stuck in "syncing" state if _do_sync raises unexpectedly.
+            self.active_tasks.pop(source_id, None)
+            self.log_buffers.pop(source_id, None)
 
     async def _do_sync(self, source_id: int):
         async with async_session() as db:
@@ -173,18 +176,6 @@ class SyncManager:
 
             # Init log buffer for this source
             self.log_buffers[source_id] = []
-
-            # Pre-sync: regenerate archive/sync files from disk state
-            pruned = self._runner.prepare_sync_files(source.id)
-            if pruned > 0:
-                prune_msg = f"[pre-sync] {pruned} missing files will be re-downloaded"
-                self.log_buffers.setdefault(source_id, []).append(prune_msg)
-                self._live[source_id].logs.append(prune_msg)
-                if self._ws_manager:
-                    await self._ws_manager.broadcast(source_id, {
-                        "type": "log",
-                        "line": prune_msg,
-                    })
 
             # Progress tracking
             item_re = re.compile(r"Downloading item (\d+) of (\d+)")
@@ -227,6 +218,20 @@ class SyncManager:
                         })
 
             try:
+                # Pre-sync: regenerate archive/sync files from disk state.
+                # Inside the try block so any exception (e.g. encoding error)
+                # is caught and the source is properly marked as failed.
+                pruned = self._runner.prepare_sync_files(source.id)
+                if pruned > 0:
+                    prune_msg = f"[pre-sync] {pruned} missing files will be re-downloaded"
+                    self.log_buffers.setdefault(source_id, []).append(prune_msg)
+                    self._live[source_id].logs.append(prune_msg)
+                    if self._ws_manager:
+                        await self._ws_manager.broadcast(source_id, {
+                            "type": "log",
+                            "line": prune_msg,
+                        })
+
                 if self._ws_manager:
                     await self._ws_manager.broadcast(source_id, {
                         "type": "status",

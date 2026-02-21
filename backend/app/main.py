@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import update
 
-from app.database import init_db
+from app.database import init_db, async_session
+from app.models.sync_run import SyncRun
 from app.routers import sources, settings, history, sync, filesystem, rekordbox
 from app.ws.sync_progress import ws_manager
 from app.services.auto_sync import auto_sync_scheduler
@@ -11,9 +14,35 @@ from app.services.library_mover import library_mover
 from app.services.sync_manager import sync_manager
 
 
+async def _cleanup_stale_runs() -> None:
+    """Mark any SyncRun records stuck in 'running' status as 'interrupted'.
+
+    These are left behind when the backend process is killed mid-sync.
+    Without this, sources appear permanently stuck in the UI and cannot
+    be deleted or synced again.
+    """
+    async with async_session() as db:
+        result = await db.execute(
+            update(SyncRun)
+            .where(SyncRun.status == "running")
+            .values(
+                status="interrupted",
+                finished_at=datetime.now(timezone.utc),
+                error_message="Backend restarted while sync was in progress",
+            )
+        )
+        await db.commit()
+        if result.rowcount:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Marked %d stale sync run(s) as interrupted", result.rowcount
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await _cleanup_stale_runs()
     sync_manager.set_ws_manager(ws_manager)
     await sync_manager.load_max_concurrent()
     library_mover.set_ws_manager(ws_manager)
