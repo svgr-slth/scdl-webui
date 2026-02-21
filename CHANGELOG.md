@@ -4,6 +4,8 @@ All notable changes to scdl-web are documented here.
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-02-21
+
 ### Added
 - **Duplicate source detection**: creating a source with the same URL and type as an existing one shows a yellow warning with a "Create anyway" option; creating an exact duplicate (same URL, type, and target folder) is blocked with a red error
 

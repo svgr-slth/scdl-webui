@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import unquote
 
 from app.config import settings
 from app.database import async_session
@@ -73,15 +73,6 @@ async def _get_or_auto_configure_xml_path() -> Path:
 
     return _get_data_dir() / "rekordbox-export.xml"
 
-
-def _path_to_location(path: Path) -> str:
-    """Convert an absolute filesystem path to a Rekordbox file:// URI."""
-    abs_path = str(path.resolve())
-    if sys.platform == "win32":
-        abs_path = abs_path.replace("\\", "/")
-        return "file://localhost/" + quote(abs_path, safe=":/")
-    else:
-        return "file://localhost" + quote(abs_path, safe="/")
 
 
 def _load_or_create_xml(xml_path: Path) -> "RekordboxXml":
@@ -172,32 +163,44 @@ async def export_source(source_id: int) -> RekordboxExportResult:
     xml_path = await _get_or_auto_configure_xml_path()
     xml_path.parent.mkdir(parents=True, exist_ok=True)
     xml = _load_or_create_xml(xml_path)
+    # pyrekordbox bug: _parse() doesn't initialize _last_id from existing tracks
+    # (only _init() does). Always sync it so add_track() doesn't collide.
+    xml._last_id = max(xml.get_track_ids(), default=0)
 
-    # Build location → TrackID map for the existing collection (O(1) lookup)
+    # Build OS-path → TrackID map for the existing collection.
+    # pyrekordbox's decode_path() URL-decodes and strips the file://localhost/ prefix.
+    # For previously-corrupt double-encoded entries (file://localhost/file://localhost/...
+    # with %2520), a second unquote() recovers the real path (e.g. %20 → space).
     existing: dict[str, int] = {}
     for t in xml.get_tracks():
-        loc = t.get("Location")
-        if loc:
-            existing[loc] = int(t["TrackID"])
+        try:
+            decoded = t.get("Location")  # decode_path output: OS path, may have %20 literals
+            normalized = os.path.normpath(unquote(decoded))  # second unquote heals %20→space
+            existing[normalized] = int(t.get("TrackID"))
+        except Exception:
+            pass
 
     tracks_added = 0
     tracks_skipped = 0
     all_track_ids: list[int] = []
 
     for audio_file in audio_files:
-        location = _path_to_location(audio_file)
-        if location in existing:
-            all_track_ids.append(existing[location])
+        os_path = os.path.normpath(str(audio_file.resolve()))
+        if os_path in existing:
+            all_track_ids.append(existing[os_path])
             tracks_skipped += 1
         else:
             try:
                 meta = _read_metadata(audio_file)
-                track = xml.add_track(location=location)
-                for key, value in meta.items():
-                    if value:
-                        track[key] = value
-                track_id = int(track["TrackID"])
-                existing[location] = track_id
+                # Pass the raw OS path — pyrekordbox's encode_path() handles URI encoding
+                track = xml.add_track(str(audio_file.resolve()))
+                for attr, val in [("Name", meta.get("Name")), ("Artist", meta.get("Artist")),
+                                   ("Album", meta.get("Album")), ("Genre", meta.get("Genre")),
+                                   ("AverageBpm", meta.get("Bpm"))]:
+                    if val:
+                        track[attr] = val
+                track_id = int(track.get("TrackID"))
+                existing[os_path] = track_id
                 all_track_ids.append(track_id)
                 tracks_added += 1
             except Exception as e:
@@ -206,22 +209,27 @@ async def export_source(source_id: int) -> RekordboxExportResult:
 
     # Non-destructive playlist update
     playlist_name = source.name
-    root_folder = xml.get_playlist("root")
+    root_folder = xml.get_playlist()  # no args = root playlist folder
 
+    # Safe lookup: get_playlist(name) creates a spurious element when not found,
+    # so iterate direct children instead.
     playlist_node = None
-    try:
-        playlist_node = root_folder.get_playlist(playlist_name)
-    except Exception:
-        pass
+    for p in root_folder.get_playlists():
+        try:
+            if p.name == playlist_name:
+                playlist_node = p
+                break
+        except ValueError:
+            pass  # skip unnamed spurious nodes
 
+    existing_playlist_ids: set[str] = set()
     if playlist_node is None:
         playlist_node = root_folder.add_playlist(playlist_name, keytype="TrackID")
-        existing_playlist_ids: set[str] = set()
     else:
         try:
             existing_playlist_ids = set(str(k) for k in playlist_node.get_tracks())
         except Exception:
-            existing_playlist_ids = set()
+            pass
 
     playlist_updated = 0
     for track_id in all_track_ids:
@@ -254,8 +262,11 @@ async def get_status() -> RekordboxStatus:
         try:
             xml = RekordboxXml(path=str(xml_path))
             total_tracks = xml.num_tracks
-            root = xml.get_playlist("root")
-            total_playlists = len(root.get_playlists()) if root else 0
+            root_folder = xml.get_playlist()  # no args = root playlist folder
+            total_playlists = sum(
+                1 for p in root_folder.get_playlists()
+                if p._element is not None and p._element.get("Name")
+            )
         except Exception:
             logger.warning("Failed to read Rekordbox XML at %s", xml_path)
 
