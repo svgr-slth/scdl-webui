@@ -9,7 +9,7 @@
   "frontend:dir": "frontend",
   "wailsjsdir": "frontend/src",
   "info": {
-    "productVersion": "3.19.0",
+    "productVersion": "3.21.0",
     "productName": "scdl-web",
     "companyName": "scdl-web",
     "copyright": "",

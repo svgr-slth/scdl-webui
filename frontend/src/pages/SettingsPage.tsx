@@ -13,8 +13,9 @@ import {
   Progress,
   Switch,
   NumberInput,
+  CopyButton,
 } from "@mantine/core";
-import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl } from "@tabler/icons-react";
+import { IconCheck, IconFolder, IconAlertTriangle, IconVinyl, IconWand, IconCopy } from "@tabler/icons-react";
 import { useSettings, useUpdateSettings } from "../hooks/useSettings";
 import { useRekordboxStatus } from "../hooks/useRekordbox";
 import { settingsApi, type MoveCheckResult } from "../api/settings";
@@ -307,6 +308,19 @@ export function SettingsPage() {
                 placeholder={rekordboxStatus?.xml_path ?? "rekordbox-export.xml"}
                 description="Path to the Rekordbox XML file for exporting tracks and playlists"
               />
+              <CopyButton value={rekordboxXmlPath} timeout={2000}>
+                {({ copied, copy }) => (
+                  <Button
+                    variant="light"
+                    color={copied ? "teal" : "gray"}
+                    leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                    onClick={copy}
+                    disabled={!rekordboxXmlPath}
+                  >
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                )}
+              </CopyButton>
               <Button
                 variant="light"
                 leftSection={<IconFolder size={16} />}
@@ -319,8 +333,16 @@ export function SettingsPage() {
           <FolderPicker
             opened={rekordboxFolderPickerOpened}
             onClose={() => setRekordboxFolderPickerOpened(false)}
-            onSelect={setRekordboxXmlPath}
-            initialPath={rekordboxXmlPath || "/"}
+            fileFilter="*.xml"
+            onSelect={(selected) => {
+              if (selected.toLowerCase().endsWith(".xml")) {
+                setRekordboxXmlPath(selected);
+              } else {
+                const sep = selected.includes("\\") ? "\\" : "/";
+                setRekordboxXmlPath(selected.replace(/[\\/]$/, "") + sep + "rekordbox.xml");
+              }
+            }}
+            initialPath={rekordboxXmlPath ? rekordboxXmlPath.replace(/[\\/][^\\/]*$/, "") || "/" : "/"}
           />
           {rekordboxStatus?.detected_paths && rekordboxStatus.detected_paths.length > 0 && (
             <Alert color="teal" variant="light">
@@ -469,6 +491,28 @@ export function SettingsPage() {
           </Group>
         </Stack>
       </Modal>
+
+      {/* Setup wizard relaunch */}
+      <Card withBorder p="lg" maw={600} mt="md">
+        <Group justify="space-between" align="center">
+          <Stack gap={2}>
+            <Text fw={500} size="sm">Setup wizard</Text>
+            <Text size="xs" c="dimmed">
+              Re-run the initial setup to reconfigure music folder, auth token, and Rekordbox.
+            </Text>
+          </Stack>
+          <Button
+            variant="light"
+            leftSection={<IconWand size={16} />}
+            onClick={() =>
+              updateSettings.mutate({ onboarding_complete: false })
+            }
+            loading={updateSettings.isPending}
+          >
+            Relaunch wizard
+          </Button>
+        </Group>
+      </Card>
     </>
   );
 }
