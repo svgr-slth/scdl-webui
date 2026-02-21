@@ -92,7 +92,7 @@ export function SourceDetail() {
         >
           Open Folder
         </Button>
-        <RekordboxActions sourceId={sourceId} variant="buttons" disabled={syncActive} />
+        <RekordboxActions sourceId={sourceId} disabled={syncActive} />
       </Group>
 
       <Card withBorder p="lg">

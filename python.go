@@ -85,7 +85,7 @@ func createVenv() error {
 func checkDeps() bool {
 	py := venvBin("python")
 	cmd := exec.Command(py, "-c",
-		"import fastapi; import uvicorn; import sqlalchemy; import aiosqlite; import alembic; import pydantic; import pydantic_settings; import scdl")
+		"import fastapi; import uvicorn; import sqlalchemy; import aiosqlite; import alembic; import pydantic; import pydantic_settings; import scdl; import mutagen")
 	hideWindow(cmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

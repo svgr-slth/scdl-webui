@@ -3,9 +3,10 @@ import { api } from "./client";
 export interface RekordboxExportResult {
   tracks_added: number;
   tracks_skipped: number;
+  playlist_updated: number;
   xml_path: string;
-  playlist_name?: string;
-  playlist_tracks?: number;
+  playlist_name: string;
+  is_rekordbox_running: boolean;
 }
 
 export interface RekordboxStatus {
@@ -18,10 +19,8 @@ export interface RekordboxStatus {
 }
 
 export const rekordboxApi = {
-  exportToCollection: (sourceId: number) =>
-    api.post<RekordboxExportResult>(`/rekordbox/${sourceId}/collection`),
-  exportAsPlaylist: (sourceId: number) =>
-    api.post<RekordboxExportResult>(`/rekordbox/${sourceId}/playlist`),
+  export: (sourceId: number) =>
+    api.post<RekordboxExportResult>(`/rekordbox/${sourceId}/export`),
   status: () => api.get<RekordboxStatus>("/rekordbox/status"),
   discover: () => api.get<{ detected_paths: string[] }>("/rekordbox/discover"),
 };
