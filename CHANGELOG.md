@@ -4,6 +4,11 @@ All notable changes to scdl-web are documented here.
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-02-21
+
+### Fixed
+- **Wizard relaunch**: clicking "Relaunch wizard" from Settings now correctly re-opens the wizard (it was blocked by a stale local flag after the first completion)
+
 ## [3.22.0] - 2026-02-21
 
 ### Changed
