@@ -4,6 +4,12 @@ All notable changes to scdl-web are documented here.
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-02-21
+
+### Changed
+- **Onboarding wizard pre-populated from existing settings**: re-opening the wizard now shows the current auth token, auto-sync settings, and Rekordbox XML path instead of blank defaults
+- **Rekordbox step side-by-side layout**: the tutorial carousel and numbered steps list are now shown in a two-column grid (wider card at 820 px with smooth transition), so users can follow the steps while viewing the screenshots without scrolling
+
 ## [3.21.0] - 2026-02-21
 
 ### Added
