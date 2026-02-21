@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Dashboard } from "./pages/Dashboard";
@@ -13,6 +13,13 @@ export function App() {
   // Local flag set immediately when the wizard finishes — avoids any race
   // between React Query cache updates and re-renders.
   const [wizardDone, setWizardDone] = useState(false);
+
+  // Reset when the user relaunches the wizard from Settings
+  useEffect(() => {
+    if (settings && !settings.onboarding_complete) {
+      setWizardDone(false);
+    }
+  }, [settings?.onboarding_complete]);
 
   if (!isLoading && settings && !settings.onboarding_complete && !wizardDone) {
     return (
